@@ -87,7 +87,7 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 
 	Napi::HandleScope scope(JsEnvManager::get_env());
 	Napi::Object instance = js_instance.Value();
-	std::string method_name = String(p_method).utf8().get_data();
+	std::string method_name = p_method.to_utf8_buffer().get_data();
 	
 	if (!instance.Has(method_name)) {
 		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;

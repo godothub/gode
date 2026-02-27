@@ -1,0 +1,25 @@
+#include "{{ header_include }}"
+#include "utils/func_utils.h"
+
+namespace gode {
+
+Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
+    Napi::Function func = DefineClass(env, "{{ class_name }}", {
+        {% for method in methods %}
+        InstanceMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name }}),
+        {% endfor %}
+    });
+
+    exports.Set("{{ class_name }}", func);
+    return exports;
+}
+
+{{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) { }
+
+{% for method in methods %}
+Napi::Value {{ class_name }}Binding::{{ method.name }}(const Napi::CallbackInfo& info) {
+    return info.Env().Undefined();
+}
+{% endfor %}
+
+} // namespace gode

@@ -2,6 +2,7 @@
 .idea
 .vscode
 .cache
+.venv
 
 # Ignore Visual Studio project files
 cmake-build-debug-visual-studio/
@@ -14,3 +15,6 @@ bin
 example/.godot/
 example/addons/gode/bin/*
 !example/addons/gode/bin/.gdextension
+
+include/generated
+src/generated

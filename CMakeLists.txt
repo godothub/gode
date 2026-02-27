@@ -127,6 +127,11 @@ file(GLOB_RECURSE GODE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
+option(GODE_BUILD_GENERATED_BINDINGS "Build generated binding sources" OFF)
+if(NOT GODE_BUILD_GENERATED_BINDINGS)
+    list(FILTER GODE_SOURCES EXCLUDE REGEX "/src/generated/.*\\.gen\\.cpp$")
+endif()
+
 add_library(gode SHARED ${GODE_SOURCES})
 
 if(MSVC)
@@ -134,7 +139,8 @@ if(MSVC)
 endif()
 
 target_include_directories(gode PRIVATE
-    include 
+    include
+    include/generated
     ${NODE_ADDON_API_DIR}
     ${NODE_INCLUDE_DIRS}
 )

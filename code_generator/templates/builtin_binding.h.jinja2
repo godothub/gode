@@ -1,0 +1,23 @@
+#ifndef GODE_{{ class_name|upper }}_BINDING_GEN_H
+#define GODE_{{ class_name|upper }}_BINDING_GEN_H
+
+#include <godot_cpp/variant/builtin_types.hpp>
+#include <napi.h>
+
+namespace gode {
+
+// Auto-generated bindings for {{ class_name }}
+class {{ class_name }}Binding : public Napi::ObjectWrap<{{ class_name }}Binding> {
+public:
+    static Napi::Object init(Napi::Env env, Napi::Object exports);
+    {{ class_name }}Binding(const Napi::CallbackInfo& info);
+    
+    // Methods
+    {% for method in methods %}
+    Napi::Value {{ method.name }}(const Napi::CallbackInfo& info);
+    {% endfor %}
+};
+
+} // namespace gode
+
+#endif // GODE_{{ class_name|upper }}_BINDING_GEN_H
