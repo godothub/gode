@@ -2,7 +2,6 @@
 #include "support/javascript/javascript_instance.h"
 #include "support/javascript/javascript_instance_info.h"
 #include "support/javascript/javascript_language.h"
-#include "utils/js_interop_utils.h"
 #include <gdextension_interface.h>
 #include <godot_cpp/godot.hpp>
 

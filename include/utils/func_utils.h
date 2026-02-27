@@ -46,14 +46,15 @@ inline Napi::Value call_builtin_static_vararg_method_no_ret(void (*Func)(const g
 }
 
 template <typename T, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_no_ret_impl(void (T::*Func)(P...), Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	Func(napi_to_godot(args[Is])...);
+inline Napi::Value call_builtin_method_no_ret_impl(void (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
+	(instance->*Func)(napi_to_godot(args[Is])...);
 	return env.Undefined();
 }
 template <typename T, typename... P>
 inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), const Napi::CallbackInfo &info) {
+	T *instance = Napi::ObjectWrap<T>::Unwrap(info.This().As<Napi::Object>());
 	std::vector<Napi::Value> args = to_args_array(info);
-	return call_builtin_method_no_ret_impl(Func, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
+	return call_builtin_method_no_ret_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 } //namespace gode
 #endif // GODE_FUNC_UTILS_H

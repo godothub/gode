@@ -4,8 +4,6 @@
 #include <napi.h>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-using namespace godot;
-
 namespace gode {
 class GD : public Napi::ObjectWrap<GD> {
 public:

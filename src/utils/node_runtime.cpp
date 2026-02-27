@@ -1,13 +1,18 @@
 #include "utils/node_runtime.h"
-#include "register/utility_functions/utility_functions.h" // Added
+#include "register/utility_functions/utility_functions.h"
 #include <cppgc/platform.h>
 #include <node.h>
+#include <node_api.h>
 #include <uv.h>
+#ifdef WIN32
+#undef CONNECT_DEFERRED
+#endif
+
+#include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <node_api.h>
 
 namespace gode {
 
@@ -27,9 +32,53 @@ static node::Environment *env = nullptr;
 static node::IsolateData *isolate_data = nullptr;
 static v8::Global<v8::Context> node_context;
 
+static Napi::Value fs_readFile(const Napi::CallbackInfo &info) {
+	Napi::Env env = info.Env();
+	if (info.Length() < 1 || !info[0].IsString()) {
+		return env.Null();
+	}
+	std::string path = info[0].As<Napi::String>().Utf8Value();
+	if (path.find("res://") != 0) {
+		return env.Null();
+	}
+
+	godot::Ref<godot::FileAccess> file = godot::FileAccess::open(path.c_str(), godot::FileAccess::READ);
+	if (file.is_null()) {
+		return env.Null();
+	}
+
+	uint64_t len = file->get_length();
+	godot::PackedByteArray pba = file->get_buffer(len);
+	return Napi::String::New(env, reinterpret_cast<const char *>(pba.ptr()), len);
+}
+
+static Napi::Value fs_stat(const Napi::CallbackInfo &info) {
+	Napi::Env env = info.Env();
+	if (info.Length() < 1 || !info[0].IsString()) {
+		return Napi::Number::New(env, 0);
+	}
+	std::string path = info[0].As<Napi::String>().Utf8Value();
+	if (path.find("res://") != 0) {
+		return Napi::Number::New(env, 0);
+	}
+
+	godot::String gd_path = godot::String::utf8(path.c_str());
+	if (godot::FileAccess::file_exists(gd_path)) {
+		return Napi::Number::New(env, 1); // File
+	}
+	if (godot::DirAccess::dir_exists_absolute(gd_path)) {
+		return Napi::Number::New(env, 2); // Directory
+	}
+	return Napi::Number::New(env, 0); // Not found
+}
+
 static Napi::Object InitGodeAddon(Napi::Env env, Napi::Object exports) {
 	gode::JsEnvManager::init(env);
 	gode::GD::init(env, exports);
+
+	exports.Set("fs_readFile", Napi::Function::New(env, fs_readFile));
+	exports.Set("fs_stat", Napi::Function::New(env, fs_stat));
+
 	return exports;
 }
 
@@ -53,6 +102,7 @@ void NodeRuntime::init_once() {
 			node::ProcessInitializationFlags::kNoDefaultSignalHandling |
 			node::ProcessInitializationFlags::kNoStdioInitialization;
 
+#ifdef _MSC_VER
 	auto init_result = node::InitializeOncePerProcess(args, static_cast<node::ProcessInitializationFlags::Flags>(flags));
 
 	if (!init_result->errors().empty()) {
@@ -60,6 +110,10 @@ void NodeRuntime::init_once() {
 			// printf("Node init error: %s\n", err.c_str());
 		}
 	}
+#else
+	// Warn about ABI incompatibility when using MinGW/GCC on Windows
+	#pragma message("WARNING: Skipping node::InitializeOncePerProcess due to ABI incompatibility (Non-MSVC compiler). Node.js embedding may fail.")
+#endif
 
 	allocator = node::ArrayBufferAllocator::Create();
 
@@ -84,7 +138,69 @@ void NodeRuntime::init_once() {
 
 		node::AddLinkedBinding(env, "gode", InitGodeAddon_C, NODE_API_DEFAULT_MODULE_API_VERSION);
 
-		node::LoadEnvironment(env, "process._linkedBinding('gode');");
+		std::string boot_script =
+				"const Module = require('module');"
+				"const path = require('path');"
+				"const fs = require('fs');"
+				"const gode = process._linkedBinding('gode');"
+				""
+				"const originalReadFileSync = fs.readFileSync;"
+				"fs.readFileSync = function(p, options) {"
+				"  if (typeof p === 'string' && p.startsWith('res://')) {"
+				"    const content = gode.fs_readFile(p);"
+				"    if (content !== null) return content;"
+				"  }"
+				"  return originalReadFileSync.call(fs, p, options);"
+				"};"
+				""
+				"const originalExistsSync = fs.existsSync;"
+				"fs.existsSync = function(p) {"
+				"  if (typeof p === 'string' && p.startsWith('res://')) {"
+				"    return gode.fs_stat(p) > 0;"
+				"  }"
+				"  return originalExistsSync ? originalExistsSync.call(fs, p) : false;"
+				"};"
+				""
+				"const originalStatSync = fs.statSync;"
+				"fs.statSync = function(p, options) {"
+				"  if (typeof p === 'string' && p.startsWith('res://')) {"
+				"    const type = gode.fs_stat(p);"
+				"    if (type > 0) {"
+				"      return {"
+				"        isDirectory: () => type === 2,"
+				"        isFile: () => type === 1,"
+				"        mtime: new Date(),"
+				"        size: 0"
+				"      };"
+				"    }"
+				"  }"
+				"  return originalStatSync.call(fs, p, options);"
+				"};"
+				""
+				"const originalResolve = path.resolve;"
+				"path.resolve = function(...args) {"
+				"  if (args.length > 0 && typeof args[0] === 'string' && args[0].startsWith('res://')) {"
+				"      return args.join('/').replace(/\\\\/g, '/');"
+				"  }"
+				"  return originalResolve.apply(path, args);"
+				"};"
+				""
+				"globalThis.__gode_compile = function(code, filename) {"
+				"  try {"
+				"    const m = new Module(filename, module);"
+				"    m.filename = filename;"
+				"    m.paths = Module._nodeModulePaths(path.dirname(filename));"
+				"    m._compile(code, filename);"
+				"    return m.exports;"
+				"  } catch (e) {"
+				"    console.error('Gode compile error:', e);"
+				"    return undefined;"
+				"  }"
+				"};"
+				"globalThis.require = require;"
+				"process._linkedBinding('gode');";
+
+		node::LoadEnvironment(env, boot_script.c_str());
 
 		node_context.Reset(isolate, context);
 	}
@@ -135,73 +251,27 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
 
-	// 1. Prepare the source code and origin
-	v8::Local<v8::String> source_text = v8::String::NewFromUtf8(isolate, code.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
-	v8::Local<v8::String> file_name = v8::String::NewFromUtf8(isolate, filename.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
-
-	v8::ScriptOrigin origin(file_name);
-	v8::ScriptCompiler::Source source(source_text, origin);
-
-	// 2. Define the argument names for the wrapper function
-	//    (function (exports, require, module, __filename, __dirname) { ... })
-	const char *arg_names[] = { "exports", "require", "module", "__filename", "__dirname" };
-	int arg_count = 5;
-
-	v8::Local<v8::String> params[5];
-	for (int i = 0; i < arg_count; i++) {
-		params[i] = v8::String::NewFromUtf8(isolate, arg_names[i], v8::NewStringType::kInternalized).ToLocalChecked();
-	}
-
-	// 3. Compile the function
-	v8::MaybeLocal<v8::Function> maybe_fun = v8::ScriptCompiler::CompileFunction(
-			context,
-			&source,
-			arg_count,
-			params);
-
-	v8::Local<v8::Function> compiled_fn;
-	if (!maybe_fun.ToLocal(&compiled_fn)) {
-		// Compilation failed (syntax error, etc.)
+	v8::Local<v8::String> fn_name = v8::String::NewFromUtf8Literal(isolate, "__gode_compile");
+	v8::Local<v8::Value> fn_val;
+	if (!context->Global()->Get(context, fn_name).ToLocal(&fn_val) || !fn_val->IsFunction()) {
 		return Napi::Value();
 	}
 
-	// 4. Create the 'module' and 'exports' objects
-	v8::Local<v8::Object> module_obj = v8::Object::New(isolate);
-	v8::Local<v8::Object> exports_obj = v8::Object::New(isolate);
-
-	// module.exports = exports
-	v8::Local<v8::String> exports_prop_name = v8::String::NewFromUtf8Literal(isolate, "exports");
-	module_obj->Set(context, exports_prop_name, exports_obj).Check();
-
-	// 5. Prepare the arguments values to pass to the function
-	//    Order matches arg_names: [exports, require, module, __filename, __dirname]
-	v8::Local<v8::Value> require_fn = v8::Undefined(isolate); // You can implement a custom require function here if needed
-	v8::Local<v8::String> dirname = v8::String::NewFromUtf8Literal(isolate, "."); // Placeholder dirname
+	v8::Local<v8::Function> fn = fn_val.As<v8::Function>();
 
 	v8::Local<v8::Value> args[] = {
-		exports_obj, // exports
-		require_fn, // require
-		module_obj, // module
-		file_name, // __filename
-		dirname // __dirname
+		v8::String::NewFromUtf8(isolate, code.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+		v8::String::NewFromUtf8(isolate, filename.c_str(), v8::NewStringType::kNormal).ToLocalChecked()
 	};
 
-	// 6. Run the compiled function
-	v8::MaybeLocal<v8::Value> result = compiled_fn->Call(context, context->Global(), arg_count, args);
+	v8::MaybeLocal<v8::Value> result = fn->Call(context, context->Global(), 2, args);
 
 	if (result.IsEmpty()) {
-		// Runtime error
 		return Napi::Value();
 	}
 
-	// 7. Retrieve 'module.exports'
-	//    The script might have done `module.exports = ...` replacing our original object
-	v8::Local<v8::Value> final_exports;
-	if (module_obj->Get(context, exports_prop_name).ToLocal(&final_exports)) {
-		return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*handle_scope.Escape(final_exports)));
-	}
-
-	return Napi::Value();
+	v8::Local<v8::Value> final_exports = result.ToLocalChecked();
+	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*handle_scope.Escape(final_exports)));
 }
 
 Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {

@@ -1,10 +1,7 @@
 #include "register/utility_functions/utility_functions.h"
 #include "napi.h"
 #include "utils/func_utils.h"
-#include "utils/js_interop_utils.h"
 #include <godot_cpp/variant/utility_functions.hpp>
-
-using namespace godot;
 
 Napi::Object gode::GD::init(Napi::Env env, Napi::Object exports) {
 	// Define the class and its methods

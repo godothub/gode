@@ -1,7 +1,8 @@
-#pragma once
+#ifndef NODE_RUNTIME_H
+#define NODE_RUNTIME_H
 
-#include "js_native_api_types.h"
-#include "napi.h"
+
+#include <napi.h>
 
 #include <string>
 
@@ -23,3 +24,5 @@ public:
 };
 
 } // namespace gode
+
+#endif // NODE_RUNTIME_H
