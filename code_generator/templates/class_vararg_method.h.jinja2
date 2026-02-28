@@ -1,0 +1,31 @@
+#ifndef GODE_GENERATED_CLASS_{{ snake_name|upper }}_VARARG_METHOD_H
+#define GODE_GENERATED_CLASS_{{ snake_name|upper }}_VARARG_METHOD_H
+
+#include "utils/vararg_macros.h"
+#include <godot_cpp/{{ godot_header_dir }}/{{ godot_include_name }}.hpp>
+
+namespace gode {
+namespace classes {
+namespace {{ snake_name }} {
+
+{% for method in vararg_methods %}
+{% if method.is_static %}
+{% if method.has_return_value %}
+DEFINE_CLASS_STATIC_VARARG_METHOD_RET({{ godot_class_name }}, {{ class_name }}, {{ method.name_cpp }}, {{ method.hash }}, {{ method.return_type_cpp }})
+{% else %}
+DEFINE_CLASS_STATIC_VARARG_METHOD_VOID({{ godot_class_name }}, {{ class_name }}, {{ method.name_cpp }}, {{ method.hash }})
+{% endif %}
+{% else %}
+{% if method.has_return_value %}
+DEFINE_CLASS_VARARG_METHOD_RET({{ godot_class_name }}, {{ class_name }}, {{ method.name_cpp }}, {{ method.hash }}, {{ method.return_type_cpp }})
+{% else %}
+DEFINE_CLASS_VARARG_METHOD_VOID({{ godot_class_name }}, {{ class_name }}, {{ method.name_cpp }}, {{ method.hash }})
+{% endif %}
+{% endif %}
+{% endfor %}
+
+} // namespace {{ snake_name }}
+} // namespace classes
+} // namespace gode
+
+#endif

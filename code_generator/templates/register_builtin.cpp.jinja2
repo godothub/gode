@@ -1,0 +1,18 @@
+#include "register_builtin.gen.h"
+
+// Builtins
+{% for item in builtins %}
+#include "{{ item.include }}"
+{% endfor %}
+
+namespace gode {
+
+void register_builtin(Napi::Env env) {
+    Napi::Object target = env.Global();
+    // Register Builtins
+    {% for item in builtins %}
+    {{ item.class_name }}Binding::init(env, target);
+    {% endfor %}
+}
+
+} // namespace gode

@@ -1,0 +1,31 @@
+#include "register_classes.gen.h"
+#include <node.h>
+#include <node_api.h>
+
+// Classes
+{% for item in classes %}
+#include "{{ item.include }}"
+{% endfor %}
+
+namespace gode {
+
+// Helper to create module registration function (N-API style)
+{% for item in classes %}
+static napi_value Init_{{ item.class_name }}(napi_env env, napi_value exports) {
+    return {{ item.class_name }}Binding::init(Napi::Env(env), Napi::Object(env, exports));
+}
+{% endfor %}
+
+void register_classes(Napi::Env env) {
+    // Retrieve node::Environment* from the current V8 context
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    node::Environment* node_env = node::GetCurrentEnvironment(context);
+
+    // Register each class as a linked binding using N-API overload
+    {% for item in classes %}
+    node::AddLinkedBinding(node_env, "godot/classes/{{ item.snake_name }}", Init_{{ item.class_name }}, NAPI_VERSION);
+    {% endfor %}
+}
+
+} // namespace gode

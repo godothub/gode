@@ -25,7 +25,7 @@ class Javascript : public godot::ScriptExtension {
 
 private:
 	bool compile();
-	void _update_metadata(); // Update metadata using Tree-sitter
+	void _update_metadata();
 
 protected:
 	static void _bind_methods();

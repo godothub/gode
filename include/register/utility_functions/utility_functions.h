@@ -12,6 +12,17 @@ public:
 
 private:
 	Napi::Value print(const Napi::CallbackInfo &info);
+	Napi::Value print_rich(const Napi::CallbackInfo &info);
+	Napi::Value printerr(const Napi::CallbackInfo &info);
+	Napi::Value printt(const Napi::CallbackInfo &info);
+	Napi::Value prints(const Napi::CallbackInfo &info);
+	Napi::Value printraw(const Napi::CallbackInfo &info);
+	Napi::Value print_verbose(const Napi::CallbackInfo &info);
+	Napi::Value push_error(const Napi::CallbackInfo &info);
+	Napi::Value push_warning(const Napi::CallbackInfo &info);
+	Napi::Value max(const Napi::CallbackInfo &info);
+	Napi::Value min(const Napi::CallbackInfo &info);
+	Napi::Value str(const Napi::CallbackInfo &info);
 };
 } //namespace gode
 

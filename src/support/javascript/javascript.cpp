@@ -3,8 +3,8 @@
 #include "support/javascript/javascript_instance_info.h"
 #include "support/javascript/javascript_language.h"
 #include <gdextension_interface.h>
-#include <godot_cpp/godot.hpp>
 #include <tree_sitter/api.h>
+#include <godot_cpp/godot.hpp>
 
 using namespace godot;
 using namespace gode;
@@ -44,7 +44,7 @@ void Javascript::_update_metadata() {
 
 	// Basic query to find class declaration and methods
 	// Note: This is a simplified implementation. A robust one would use TSQuery.
-	
+
 	// Iterate over top-level nodes to find class declaration
 	uint32_t child_count = ts_node_child_count(root_node);
 	for (uint32_t i = 0; i < child_count; i++) {
@@ -71,15 +71,15 @@ void Javascript::_update_metadata() {
 					if (strcmp(ts_node_type(heritage_child), "extends_clause") == 0) {
 						TSNode base_node = ts_node_child_by_field_name(heritage_child, "value", strlen("value")); // or just the identifier
 						if (ts_node_child_count(base_node) > 0) {
-                             // Sometimes it's a member expression like godot.Node
-                             // For simplicity, we just grab the text
-                        }
-                        // Actually, extends_clause child at index 1 is usually the class
-                        // Let's just grab the text of the last child of extends_clause for now
-                        TSNode value_node = ts_node_child(heritage_child, ts_node_child_count(heritage_child) - 1);
-                        uint32_t start = ts_node_start_byte(value_node);
-                        uint32_t end = ts_node_end_byte(value_node);
-                        base_class_name = StringName(source.substr(start, end - start).c_str());
+							// Sometimes it's a member expression like godot.Node
+							// For simplicity, we just grab the text
+						}
+						// Actually, extends_clause child at index 1 is usually the class
+						// Let's just grab the text of the last child of extends_clause for now
+						TSNode value_node = ts_node_child(heritage_child, ts_node_child_count(heritage_child) - 1);
+						uint32_t start = ts_node_start_byte(value_node);
+						uint32_t end = ts_node_end_byte(value_node);
+						base_class_name = StringName(source.substr(start, end - start).c_str());
 					}
 				}
 			}
@@ -100,42 +100,42 @@ void Javascript::_update_metadata() {
 
 					Dictionary method_info;
 					method_info["name"] = method_name;
-					
+
 					// Determine if static
 					// In JS, 'static' is a modifier. We'd need to check children for 'static' keyword node
 					// Simplified: check text starts with static? No, that's unreliable.
-                    // TS structure: modifiers are children before name?
-                    // Let's assume instance method for now.
-                    
-                    // Parameters
-                    TSNode params_node = ts_node_child_by_field_name(member, "parameters", strlen("parameters"));
-                    TypedArray<Dictionary> args;
-                    uint32_t param_count = ts_node_child_count(params_node);
-                     for (uint32_t k = 0; k < param_count; k++) {
-                        TSNode param = ts_node_child(params_node, k);
-                        // Skip parentheses and commas
-                        if (strcmp(ts_node_type(param), "identifier") == 0) {
-                            uint32_t p_start = ts_node_start_byte(param);
-                            uint32_t p_end = ts_node_end_byte(param);
-                            String param_name = String::utf8(source.substr(p_start, p_end - p_start).c_str());
-                            Dictionary arg;
-                            arg["name"] = param_name;
-                            arg["type"] = Variant::NIL; 
-                            args.push_back(arg);
-                        }
-                    }
-                    method_info["args"] = args;
-                    method_info["default_args"] = Array();
-                    method_info["return"] = Dictionary();
-                    method_info["flags"] = METHOD_FLAG_NORMAL;
+					// TS structure: modifiers are children before name?
+					// Let's assume instance method for now.
+
+					// Parameters
+					TSNode params_node = ts_node_child_by_field_name(member, "parameters", strlen("parameters"));
+					TypedArray<Dictionary> args;
+					uint32_t param_count = ts_node_child_count(params_node);
+					for (uint32_t k = 0; k < param_count; k++) {
+						TSNode param = ts_node_child(params_node, k);
+						// Skip parentheses and commas
+						if (strcmp(ts_node_type(param), "identifier") == 0) {
+							uint32_t p_start = ts_node_start_byte(param);
+							uint32_t p_end = ts_node_end_byte(param);
+							String param_name = String::utf8(source.substr(p_start, p_end - p_start).c_str());
+							Dictionary arg;
+							arg["name"] = param_name;
+							arg["type"] = Variant::NIL;
+							args.push_back(arg);
+						}
+					}
+					method_info["args"] = args;
+					method_info["default_args"] = Array();
+					method_info["return"] = Dictionary();
+					method_info["flags"] = METHOD_FLAG_NORMAL;
 
 					methods.push_back(method_info);
-					
+
 					// Record line number (0-based in TS, Godot uses 1-based usually? Check ScriptEditor)
 					TSPoint start_point = ts_node_start_point(method_name_node);
 					member_lines[method_name] = start_point.row + 1;
 				}
-                // TODO: Handle field_definition for properties
+				// TODO: Handle field_definition for properties
 			}
 		}
 	}

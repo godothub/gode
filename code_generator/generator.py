@@ -39,8 +39,8 @@ def main():
     print(f"Using include directory: {INCLUDE_DIR}")
     print(f"Using src directory: {SRC_DIR}")
 
-    # Discover generators in builtin, class, utility packages
-    packages = ['builtin', 'class', 'utility']
+    # Discover generators in builtin, class, utility, register packages
+    packages = ['builtin', 'class', 'register']
     all_generators = []
 
     # Ensure current directory is in sys.path

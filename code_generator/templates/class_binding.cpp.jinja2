@@ -1,16 +1,43 @@
 #include "{{ header_include }}"
 #include "utils/func_utils.h"
+{% if vararg_header_include %}
+#include "{{ vararg_header_include }}"
+{% endif %}
+{% if inherits %}
+#include "{{ parent_include }}"
+{% endif %}
+
+{% for dep in dependencies %}
+#include <{{ dep }}>
+{% endfor %}
 
 namespace gode {
 
-Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
-    Napi::Function func = DefineClass(env, "{{ class_name }}", {
+Napi::FunctionReference {{ class_name }}Binding::constructor;
+
+Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
+    if (!constructor.IsEmpty() && constructor.Env() == env) return constructor.Value();
+
+    Napi::Function func = DefineClass(env, "{{ js_class_name }}", {
         {% for method in methods %}
-        InstanceMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name }}),
+        InstanceMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name_cpp }}),
         {% endfor %}
     });
 
-    exports.Set("{{ class_name }}", func);
+    {% if inherits %}
+    Napi::Function parent_ctor = {{ parent_class_name }}Binding::get_class_constructor(env);
+    func.As<Napi::Object>().Set("__proto__", parent_ctor);
+    func.As<Napi::Object>().Get("prototype").As<Napi::Object>().Set("__proto__", parent_ctor.Get("prototype"));
+    {% endif %}
+
+    constructor = Napi::Persistent(func);
+    constructor.SuppressDestruct();
+    return func;
+}
+
+Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
+    Napi::Function func = get_class_constructor(env);
+    exports.Set("{{ js_class_name }}", func);
     return exports;
 }
 
@@ -19,8 +46,60 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
 }
 
 {% for method in methods %}
-Napi::Value {{ class_name }}Binding::{{ method.name }}(const Napi::CallbackInfo& info) {
-    return info.Env().Undefined();
+Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackInfo& info) {
+    {% if method.is_static %}
+        {% if method.is_vararg %}
+            {% if method.return_type %}
+    return call_builtin_static_vararg_method_ret(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, info);
+            {% else %}
+    return call_builtin_static_vararg_method_no_ret(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, info);
+            {% endif %}
+        {% else %}
+            {% if method.return_type %}
+    return call_builtin_static_method_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+            {% else %}
+    return call_builtin_static_method_no_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+            {% endif %}
+        {% endif %}
+    {% else %}
+        {% if method.is_vararg %}
+            {% if method.return_type %}
+    return call_builtin_vararg_method_ret(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, instance, info);
+            {% else %}
+    return call_builtin_vararg_method_no_ret(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, instance, info);
+            {% endif %}
+        {% else %}
+            {% if method.is_const %}
+                {% if method.return_type %}
+                    {% if method.cast_signature %}
+    return call_builtin_const_method_ret({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_const_method_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% else %}
+                    {% if method.cast_signature %}
+    return call_builtin_const_method_no_ret({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_const_method_no_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% endif %}
+            {% else %}
+                {% if method.return_type %}
+                    {% if method.cast_signature %}
+    return call_builtin_method_ret({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% else %}
+                    {% if method.cast_signature %}
+    return call_builtin_method_no_ret({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method_no_ret(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    {% endif %}
 }
 {% endfor %}
 

@@ -127,7 +127,7 @@ file(GLOB_RECURSE GODE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-option(GODE_BUILD_GENERATED_BINDINGS "Build generated binding sources" OFF)
+option(GODE_BUILD_GENERATED_BINDINGS "Build generated binding sources" ON)
 if(NOT GODE_BUILD_GENERATED_BINDINGS)
     list(FILTER GODE_SOURCES EXCLUDE REGEX "/src/generated/.*\\.gen\\.cpp$")
 endif()

@@ -1,5 +1,7 @@
 #include "utils/node_runtime.h"
 #include "register/utility_functions/utility_functions.h"
+#include "register_builtin.gen.h"
+#include "register_classes.gen.h"
 #include <cppgc/platform.h>
 #include <node.h>
 #include <node_api.h>
@@ -75,6 +77,8 @@ static Napi::Value fs_stat(const Napi::CallbackInfo &info) {
 static Napi::Object InitGodeAddon(Napi::Env env, Napi::Object exports) {
 	gode::JsEnvManager::init(env);
 	gode::GD::init(env, exports);
+	gode::register_builtin(env);
+	gode::register_classes(env);
 
 	exports.Set("fs_readFile", Napi::Function::New(env, fs_readFile));
 	exports.Set("fs_stat", Napi::Function::New(env, fs_stat));

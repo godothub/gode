@@ -17,7 +17,7 @@ public:
     
     // Methods
     {% for method in methods %}
-    Napi::Value {{ method.name }}(const Napi::CallbackInfo& info);
+    Napi::Value {{ method.name_cpp }}(const Napi::CallbackInfo& info);
     {% endfor %}
 };
 

@@ -1,0 +1,23 @@
+#ifndef GODE_GENERATED_BUILTIN_{{ snake_name|upper }}_VARARG_METHOD_H
+#define GODE_GENERATED_BUILTIN_{{ snake_name|upper }}_VARARG_METHOD_H
+
+#include "utils/vararg_macros.h"
+#include <godot_cpp/variant/{{ snake_name }}.hpp>
+
+namespace gode {
+namespace builtin {
+namespace {{ snake_name }} {
+
+{% for method in vararg_methods %}
+{% if method.has_return_value %}
+DEFINE_BUILTIN_VARARG_METHOD_RET({{ class_name }}, {{ method.name_cpp }}, {{ method.hash }}, GDEXTENSION_VARIANT_TYPE_{{ class_name|upper }}, {{ method.return_type_cpp }})
+{% else %}
+DEFINE_BUILTIN_VARARG_METHOD_VOID({{ class_name }}, {{ method.name_cpp }}, {{ method.hash }}, GDEXTENSION_VARIANT_TYPE_{{ class_name|upper }})
+{% endif %}
+{% endfor %}
+
+} // namespace {{ snake_name }}
+} // namespace builtin
+} // namespace gode
+
+#endif

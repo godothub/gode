@@ -1,30 +1,25 @@
 #ifndef GODE_UTILITY_FUNCTIONS_VARARG_METHOD_H
 #define GODE_UTILITY_FUNCTIONS_VARARG_METHOD_H
 
-#include <godot_cpp/variant/variant.hpp>
-#include <vector>
+#include "utils/vararg_macros.h"
 
 namespace gode {
 namespace utility {
 
-inline void print_internal(const godot::Variant **p_args, GDExtensionInt p_arg_count) {
-	static GDExtensionPtrUtilityFunction _gde_function = ::godot::gdextension_interface::variant_get_ptr_utility_function(godot::StringName("print")._native_ptr(), 2648703342);
-	CHECK_METHOD_BIND(_gde_function);
-	godot::Variant ret;
-	_gde_function(&ret, reinterpret_cast<GDExtensionConstVariantPtr *>(p_args), p_arg_count);
-}
-inline void print(const godot::Variant &arg, const std::vector<godot::Variant> &args) {
-	std::vector<godot::Variant> variant_args;
-	std::vector<godot::Variant *> variant_args_ptr;
-	variant_args.push_back(arg);
-	for (int i = 0; i < args.size(); i++) {
-		variant_args.push_back(args[i]);
-	}
-	for (int i = 0; i < variant_args.size(); i++) {
-		variant_args_ptr.push_back(&variant_args[i]);
-	}
-	print_internal(const_cast<const godot::Variant **>(variant_args_ptr.data()), variant_args_ptr.size());
-}
+DEFINE_VARARG_FUNC_VOID(print, 2648703342)
+DEFINE_VARARG_FUNC_VOID(print_rich, 2648703342)
+DEFINE_VARARG_FUNC_VOID(printerr, 2648703342)
+DEFINE_VARARG_FUNC_VOID(printt, 2648703342)
+DEFINE_VARARG_FUNC_VOID(prints, 2648703342)
+DEFINE_VARARG_FUNC_VOID(printraw, 2648703342)
+DEFINE_VARARG_FUNC_VOID(print_verbose, 2648703342)
+DEFINE_VARARG_FUNC_VOID(push_error, 2648703342)
+DEFINE_VARARG_FUNC_VOID(push_warning, 2648703342)
+
+DEFINE_VARARG_FUNC_RET(max, 3896050336)
+DEFINE_VARARG_FUNC_RET(min, 3896050336)
+DEFINE_VARARG_FUNC_RET(str, 32569176)
+
 } //namespace utility
 } //namespace gode
 

@@ -1,11 +1,11 @@
-//
-// Created by 84473 on 2026/2/27.
-//
-
 #ifndef GODE_VARIANTWRAPPED_H
 #define GODE_VARIANTWRAPPED_H
 
-class VariantWrapped {
+#include <napi.h>
+#include <godot_cpp/variant/variant.hpp>
+
+class VariantWrapped : public Napi::ObjectWrap<VariantWrapped> {
+	godot::Variant var;
 };
 
 #endif //GODE_VARIANTWRAPPED_H
