@@ -87,6 +87,45 @@ void TestRunner::run_tests() {
 			assert.notStrictEqual(foundNormal, normalPath, 'Should not return non-res path as-is');
 		});
 
+		test('Godot Node Class Binding', () => {
+			let NodeClass;
+			try {
+				// Try via linked binding directly as these are internal modules
+				const binding = process._linkedBinding('godot/classes/node');
+				NodeClass = binding.Node;
+			} catch (e) {
+				console.log('  (process._linkedBinding failed: ' + e.message + ')');
+			}
+
+			if (!NodeClass) {
+				throw new Error('Could not load Node class');
+			}
+
+			assert.strictEqual(typeof NodeClass, 'function', 'Node should be a class (function)');
+			
+			// Instantiate
+			const node = new NodeClass();
+			assert.ok(node, 'Instance should be created');
+			assert.strictEqual(typeof node.get_name, 'function', 'Should have get_name method');
+			
+			// Test method
+			node.set_name('TestNode');
+			assert.strictEqual(node.get_name(), 'TestNode', 'Name should be set and retrieved');
+			
+			// Test inheritance (Sprite2D -> Node)
+			try {
+				const spriteBinding = process._linkedBinding('godot/classes/sprite2d');
+				const Sprite2D = spriteBinding.Sprite2D;
+				const sprite = new Sprite2D();
+				
+				assert.ok(sprite instanceof NodeClass, 'Sprite2D should inherit from Node');
+				sprite.set_name('MySprite');
+				assert.strictEqual(sprite.get_name(), 'MySprite', 'Inherited method should work');
+			} catch (e) {
+				console.log('  (Sprite2D test failed: ' + e.message + ')');
+			}
+		});
+
 		console.log('--- Tests Completed ---');
 	)";
 

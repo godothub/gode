@@ -13,15 +13,15 @@ namespace gode {
 template <typename T>
 inline T convert_arg(const godot::Variant &v) {
 	if constexpr (std::is_enum_v<T>) {
-		return (T)static_cast<int64_t>(v);
+		return reinterpret_cast<T>(static_cast<int64_t>(v));
 	} else if constexpr (std::is_pointer_v<T> && std::is_base_of_v<godot::Object, std::remove_pointer_t<T>>) {
-		return (T)static_cast<godot::Object *>(v);
+		return reinterpret_cast<T>(static_cast<godot::Object *>(v));
 	} else if constexpr (std::is_same_v<T, char> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t> || std::is_same_v<T, wchar_t>) {
 		godot::String s = v;
 		if (s.length() == 0) return static_cast<T>(0);
 		return static_cast<T>(s[0]);
 	} else {
-		return (T)v;
+		return static_cast<T>(v);
 	}
 }
 
@@ -38,7 +38,7 @@ inline std::vector<Napi::Value> to_args_array(const Napi::CallbackInfo &info) {
 // 调用 C++ 静态方法
 template <typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_static_method_no_ret_impl(void (*Func)(P...), Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	Func(convert_arg<P>(napi_to_godot(args[Is]))...);
+	Func(napi_to_godot<P>(args[Is])...);
 	return env.Undefined();
 }
 template <typename... P>
@@ -49,7 +49,7 @@ inline Napi::Value call_builtin_static_method_no_ret(void (*Func)(P...), const N
 
 template <typename R, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_static_method_ret_impl(R (*Func)(P...), Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	return godot_to_napi(env, Func(convert_arg<P>(napi_to_godot(args[Is]))...));
+	return godot_to_napi(env, Func(napi_to_godot<P>(args[Is])...));
 }
 template <typename R, typename... P>
 inline Napi::Value call_builtin_static_method_ret(R (*Func)(P...), const Napi::CallbackInfo &info) {
@@ -171,7 +171,7 @@ inline Napi::Value call_builtin_vararg_method_no_ret(void (*Func)(T *, const god
 //
 // template <typename T, typename R, typename... P, std::size_t... Is>
 // inline Napi::Value call_builtin_vararg_method_ret_impl(R (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-// 	return godot_to_napi(env, (instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...));
+// 	return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
 // }
 // template <typename T, typename R, typename... P>
 // inline Napi::Value call_builtin_vararg_method_ret(R (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info) {
@@ -196,7 +196,7 @@ inline Napi::Value call_builtin_vararg_method_no_ret(void (*Func)(T *, const god
 //
 // template <typename T, typename... P, std::size_t... Is>
 // inline Napi::Value call_builtin_const_vararg_method_no_ret_impl(void (T::*Func)(P...) const, T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-// 	(instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...);
+// 	(instance->*Func)(napi_to_godot<P>(args[Is])...);
 // 	return env.Undefined();
 // }
 // template <typename T, typename... P>
@@ -207,7 +207,7 @@ inline Napi::Value call_builtin_vararg_method_no_ret(void (*Func)(T *, const god
 //
 // template <typename T, typename R, typename... P, std::size_t... Is>
 // inline Napi::Value call_builtin_const_vararg_method_ret_impl(R (T::*Func)(P...) const, T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-// 	return godot_to_napi(env, (instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...));
+// 	return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
 // }
 // template <typename T, typename R, typename... P>
 // inline Napi::Value call_builtin_const_vararg_method_ret(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info) {
@@ -231,7 +231,7 @@ inline Napi::Value call_builtin_vararg_method_no_ret(void (*Func)(T *, const god
 
 template <typename T, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_const_method_no_ret_impl(void (T::*Func)(P...) const, T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	(instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...);
+	(instance->*Func)(napi_to_godot<P>(args[Is])...);
 	return env.Undefined();
 }
 template <typename T, typename... P>
@@ -241,7 +241,7 @@ inline Napi::Value call_builtin_const_method_no_ret(void (T::*Func)(P...) const,
 }
 template <typename T, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_method_no_ret_impl(void (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	(instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...);
+	(instance->*Func)(napi_to_godot<P>(args[Is])...);
 	return env.Undefined();
 }
 template <typename T, typename... P>
@@ -252,7 +252,7 @@ inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), T *instance
 
 template <typename T, typename R, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_method_ret_impl(R (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	return godot_to_napi(env, (instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...));
+	return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
 }
 template <typename T, typename R, typename... P>
 inline Napi::Value call_builtin_method_ret(R (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info) {
@@ -262,7 +262,7 @@ inline Napi::Value call_builtin_method_ret(R (T::*Func)(P...), T *instance, cons
 
 template <typename T, typename R, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_const_method_ret_impl(R (T::*Func)(P...) const, T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
-	return godot_to_napi(env, (instance->*Func)(convert_arg<P>(napi_to_godot(args[Is]))...));
+	return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
 }
 template <typename T, typename R, typename... P>
 inline Napi::Value call_builtin_const_method_ret(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info) {

@@ -1,5 +1,7 @@
 #include "utils/value_convert.h"
 
+#include "godot_cpp/variant/utility_functions.hpp"
+
 using namespace godot;
 
 namespace gode {
@@ -16,6 +18,8 @@ Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 			return Napi::Boolean::New(env, variant.operator bool());
 		case godot::Variant::Type::STRING:
 			return Napi::String::New(env, variant.operator String().utf8().get_data());
+		case godot::Variant::Type::STRING_NAME:
+			return Napi::String::New(env, variant.operator String().utf8().get_data());
 		default:
 			return env.Undefined();
 	}
@@ -27,7 +31,7 @@ godot::Variant napi_to_godot(const Napi::Value &value) {
 	} else if (value.IsBoolean()) {
 		return value.ToBoolean().Value();
 	} else if (value.IsString()) {
-		return value.ToString().Utf8Value().c_str();
+		return String::utf8(value.ToString().Utf8Value().c_str());
 	} else {
 		return godot::Variant();
 	}

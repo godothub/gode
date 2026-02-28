@@ -42,7 +42,15 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
 }
 
 {{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) {
-    // Constructor logic
+    if (info.Length() == 1 && info[0].IsObject()) {
+        instance = Unwrap(info[0].As<Napi::Object>())->instance;
+    } else {
+        {% if is_instantiable %}
+        instance = memnew(godot::{{ godot_class_name }});
+        {% else %}
+        instance = nullptr;
+        {% endif %}
+    }
 }
 
 {% for method in methods %}

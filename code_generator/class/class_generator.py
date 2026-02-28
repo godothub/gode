@@ -223,6 +223,7 @@ class ClassGenerator(CodeGenerator):
                 'parent_class_name': class_def.get('inherits'),
                 'parent_snake_name': to_snake_case(class_def.get('inherits')) if class_def.get('inherits') else None,
                 'parent_include': f"classes/{to_snake_case(class_def.get('inherits'))}_binding.gen.h" if class_def.get('inherits') else None,
+                'is_instantiable': class_def.get('is_instantiable', False),
                 'methods': methods,
                 'vararg_methods': vararg_methods,
                 'dependencies': sorted(list(dependencies)),
