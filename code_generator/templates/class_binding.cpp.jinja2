@@ -1,5 +1,6 @@
 #include "{{ header_include }}"
 #include "utils/func_utils.h"
+#include "utils/value_convert.h"
 #include <godot_cpp/variant/utility_functions.hpp>
 {% if vararg_header_include %}
 #include "{{ vararg_header_include }}"
@@ -15,6 +16,19 @@
 namespace gode {
 
 Napi::FunctionReference {{ class_name }}Binding::constructor;
+
+Napi::Object {{ class_name }}Binding::create_singleton(Napi::Env env, godot::{{ godot_class_name }}* instance) {
+    Napi::External<godot::{{ godot_class_name }}> external = Napi::External<godot::{{ godot_class_name }}>::New(env, instance);
+    return constructor.New({external});
+}
+
+godot::Object *{{ class_name }}Binding_unwrap(const Napi::Object &obj) {
+    return {{ class_name }}Binding::Unwrap(obj)->instance;
+}
+
+void {{ class_name }}Binding_wrap(const Napi::Object &obj, godot::Object *instance) {
+    {{ class_name }}Binding::Unwrap(obj)->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(instance);
+}
 
 Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     if (!constructor.IsEmpty()) {
@@ -48,6 +62,11 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
 
     // Manually attach methods to prototype to avoid InstanceMethod's strict 'this' check
     Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
+    
+    // Add toString method
+    prototype.Set("toString", Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "toString"));
+    prototype.Set(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "inspect"));
+
     {% for method in methods %}
     {% if not method.is_static %}
     prototype.Set("{{ method.name }}", Napi::Function::New(env, &{{ class_name }}Binding::{{ method.name_cpp }}, "{{ method.name }}"));
@@ -61,12 +80,22 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
 
 Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = get_class_constructor(env);
+    
+    // For Singletons, we don't want to expose the class constructor to JS.
+    // We only register it internally so we can wrap instances.
+    {% if not is_singleton %}
     exports.Set("{{ js_class_name }}", func);
+    {% endif %}
+    
+    register_class("{{ js_class_name }}", &constructor, &{{ class_name }}Binding_unwrap, &{{ class_name }}Binding_wrap);
+    
     return exports;
 }
 
 {{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) {
-    if (info.Length() == 1 && info[0].IsObject()) {
+    if (info.Length() == 1 && info[0].IsExternal()) {
+        instance = info[0].As<Napi::External<godot::{{ godot_class_name }}>>().Data();
+    } else if (info.Length() == 1 && info[0].IsObject()) {
         instance = Unwrap(info[0].As<Napi::Object>())->instance;
     } else {
         {% if is_instantiable %}
@@ -75,6 +104,16 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
         instance = nullptr;
         {% endif %}
     }
+}
+
+Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) {
+    Napi::Object js_this = info.This().As<Napi::Object>();
+    {{ class_name }}Binding* binding_instance = {{ class_name }}Binding::Unwrap(js_this);
+    godot::{{ godot_class_name }}* instance = binding_instance->instance;
+    if (!instance) {
+        return Napi::String::New(info.Env(), "null");
+    }
+    return Napi::String::New(info.Env(), instance->to_string().utf8().get_data());
 }
 
 {% for method in methods %}

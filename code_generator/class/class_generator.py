@@ -97,6 +97,11 @@ class ClassGenerator(CodeGenerator):
             all_class_names.add(c['name'])
             if c.get('is_refcounted'):
                 refcounted_classes.add(c['name'])
+                
+        # Collect singletons
+        singletons = set()
+        for s in api_data.get('singletons', []):
+            singletons.add(s['name'])
 
         for class_def in api_data['classes']:
             class_name = class_def['name']
@@ -230,7 +235,8 @@ class ClassGenerator(CodeGenerator):
                 'enums': class_def.get('enums', []),
                 'constants': class_def.get('constants', []),
                 'properties': class_def.get('properties', []),
-                'signals': class_def.get('signals', [])
+                'signals': class_def.get('signals', []),
+                'is_singleton': class_name in singletons
             }
             
             header_rel_path = os.path.join('classes', f"{snake_name}_binding.gen.h")

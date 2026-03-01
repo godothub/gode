@@ -20,6 +20,15 @@ public:
     {% for method in methods %}
     Napi::Value {{ method.name_cpp }}(const Napi::CallbackInfo& info);
     {% endfor %}
+
+    // ToString
+    Napi::Value _to_string(const Napi::CallbackInfo& info);
+
+    // Members
+    {% for member in members %}
+    Napi::Value {{ member.getter }}(const Napi::CallbackInfo& info);
+    void {{ member.setter }}(const Napi::CallbackInfo& info, const Napi::Value& value);
+    {% endfor %}
 };
 
 } // namespace gode

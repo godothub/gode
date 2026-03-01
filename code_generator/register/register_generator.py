@@ -74,8 +74,24 @@ class RegisterGenerator(CodeGenerator):
             }
             pass
 
+        # Process Singletons
+        singletons = []
+        for s in api_data.get('singletons', []):
+            singleton_name = s['name']
+            singleton_type = s['type']
+            binding_type = singleton_type
+            if singleton_name == 'ClassDB':
+                singleton_type = 'ClassDBSingleton'
+                binding_type = 'ClassDB'
+            singletons.append({
+                'name': singleton_name,
+                'type': singleton_type,
+                'binding_type': binding_type
+            })
+
         context = {
-            'classes': classes
+            'classes': classes,
+            'singletons': singletons
         }
         self.render('register_classes.h.jinja2', context, 'register_classes.gen.h', 'include_dir')
         self.render('register_classes.cpp.jinja2', context, 'register_classes.gen.cpp', 'src_dir')

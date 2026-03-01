@@ -250,6 +250,12 @@ inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), T *instance
 	return call_builtin_method_no_ret_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
+template <typename T, typename... P>
+inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info, const Napi::Value &val) {
+    (instance->*Func)(napi_to_godot<P>(val)...);
+    return info.Env().Undefined();
+}
+
 template <typename T, typename R, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_method_ret_impl(R (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
 	return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));

@@ -8,6 +8,51 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.base_generator import CodeGenerator
 from utils.string_utils import to_snake_case, sanitize_method_name
 
+# Map of classes and their direct fields (vs properties accessed via methods)
+DIRECT_FIELDS = {
+    'Vector2': ['x', 'y'],
+    'Vector2i': ['x', 'y'],
+    'Vector3': ['x', 'y', 'z'],
+    'Vector3i': ['x', 'y', 'z'],
+    'Vector4': ['x', 'y', 'z', 'w'],
+    'Vector4i': ['x', 'y', 'z', 'w'],
+    'Rect2': ['position', 'size'],
+    'Rect2i': ['position', 'size'],
+    'Quaternion': ['x', 'y', 'z', 'w'],
+    'Color': ['r', 'g', 'b', 'a'],
+    'Plane': ['normal', 'd', 'x', 'y', 'z'],
+    'AABB': ['position', 'size'],
+    'Basis': ['rows'], # Basis usually exposes rows[3]
+    'Transform2D': ['columns'], # Transform2D exposes columns[3]
+    'Transform3D': ['basis', 'origin'],
+    'Projection': ['columns'],
+}
+
+# Special mapping for members that are fields but need index access or name mapping
+FIELD_MAPPING = {
+    'Basis': {
+        'x': 'rows[0]',
+        'y': 'rows[1]',
+        'z': 'rows[2]',
+    },
+    'Transform2D': {
+        'x': 'columns[0]',
+        'y': 'columns[1]',
+        'origin': 'columns[2]',
+    },
+    'Projection': {
+        'x': 'columns[0]',
+        'y': 'columns[1]',
+        'z': 'columns[2]',
+        'w': 'columns[3]',
+    },
+    'Plane': {
+        'x': 'normal.x',
+        'y': 'normal.y',
+        'z': 'normal.z',
+    }
+}
+
 class BuiltinClassGenerator(CodeGenerator):
     def get_cpp_type(self, type_name, meta, refcounted_classes, is_arg=False):
         if type_name == 'void': return 'void'
@@ -36,7 +81,15 @@ class BuiltinClassGenerator(CodeGenerator):
             return f"godot::BitField<godot::{type_name.replace('bitfield::', '').replace('.', '::')}>"
             
         # Builtins
-        builtins = ['String', 'StringName', 'NodePath', 'Variant', 'Vector2', 'Vector2i', 'Vector3', 'Vector3i', 'Vector4', 'Vector4i', 'Color', 'Rect2', 'Rect2i', 'Transform2D', 'Plane', 'Quaternion', 'AABB', 'Basis', 'Transform3D', 'Projection', 'Callable', 'Signal', 'Dictionary', 'Array', 'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array', 'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array', 'PackedColorArray']
+        builtins = [
+            'String', 'StringName', 'NodePath', 'Variant', 
+            'Vector2', 'Vector2i', 'Rect2', 'Rect2i', 'Vector3', 'Vector3i', 'Transform2D',
+            'Vector4', 'Vector4i', 'Plane', 'Quaternion', 'AABB', 'Basis', 'Transform3D', 
+            'Projection', 'Color', 'Callable', 'Signal', 'Dictionary', 'Array', 
+            'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array', 
+            'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array', 
+            'PackedColorArray', 'PackedVector4Array', 'RID'
+        ]
         
         if type_name in builtins:
             if is_arg:
@@ -118,7 +171,30 @@ class BuiltinClassGenerator(CodeGenerator):
                 name = m['name']
                 method_counts[name] = method_counts.get(name, 0) + 1
             
+            # Collect member names to avoid redefinition
+            member_names = set()
+            if 'members' in builtin_class:
+                for member in builtin_class['members']:
+                     member_names.add(member['name'])
+
             problematic_methods = {'rotated'}
+            
+            # Filter out methods that conflict with member getters/setters
+            filtered_methods = []
+            for method in methods:
+                method_name = method['name']
+                is_conflict = False
+                
+                # Check for get_member / set_member pattern
+                if method_name.startswith('get_') and method_name[4:] in member_names:
+                    is_conflict = True
+                elif method_name.startswith('set_') and method_name[4:] in member_names:
+                    is_conflict = True
+                
+                if not is_conflict:
+                    filtered_methods.append(method)
+            
+            methods = filtered_methods
             
             for method in methods:
                 method['name_cpp'] = sanitize_method_name(method['name'])
@@ -166,15 +242,65 @@ class BuiltinClassGenerator(CodeGenerator):
                         method['has_return_value'] = False
                     vararg_methods.append(method)
             
+            # Process members
+            members = []
+            if 'members' in builtin_class:
+                for member in builtin_class['members']:
+                    member_name = member['name']
+
+                    # Skip problematic members in Color class
+                    if class_name == 'Color' and member_name in ['ok_hsl_h', 'ok_hsl_s', 'ok_hsl_l']:
+                        continue
+                    
+                    # Determine if it's a direct field or property access
+                    is_field = False
+                    mapped_name = member_name
+                    
+                    if class_name in DIRECT_FIELDS:
+                        if member_name in DIRECT_FIELDS[class_name]:
+                            is_field = True
+                    
+                    if class_name in FIELD_MAPPING:
+                         if member_name in FIELD_MAPPING[class_name]:
+                             is_field = True
+                             mapped_name = FIELD_MAPPING[class_name][member_name]
+                    
+                    member_data = {
+                        'name': member_name,
+                        'mapped_name': mapped_name,
+                        'type': member['type'],
+                        'type_cpp': self.get_cpp_type(member['type'], '', refcounted_classes, False),
+                        'getter': f"get_{member_name}",
+                        'setter': f"set_{member_name}",
+                        'is_field': is_field
+                    }
+                    members.append(member_data)
+
+            # Process constructors
+            constructors = []
+            if 'constructors' in builtin_class:
+                for c in builtin_class['constructors']:
+                    args = []
+                    for arg in c.get('arguments', []):
+                         args.append({
+                             'name': arg['name'],
+                             'type': arg['type'],
+                             'type_cpp': self.get_cpp_type(arg['type'], '', refcounted_classes, True)
+                         })
+                    constructors.append({
+                        'index': c['index'],
+                        'arguments': args
+                    })
+
             context = {
                 'js_class_name': js_class_name,
                 'class_name': class_name,
                 'methods': methods,
                 'vararg_methods': vararg_methods,
-                'members': builtin_class.get('members', []),
+                'members': members,
                 'constants': builtin_class.get('constants', []),
                 'operators': builtin_class.get('operators', []),
-                'constructors': builtin_class.get('constructors', []),
+                'constructors': constructors,
                 'has_destructor': builtin_class.get('has_destructor', False),
                 'indexing_return_type': builtin_class.get('indexing_return_type'),
                 'is_keyed': builtin_class.get('is_keyed', False),

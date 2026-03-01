@@ -1,5 +1,8 @@
 #include "utils/value_convert.h"
 
+#include <unordered_map>
+#include <vector>
+
 #include "godot_cpp/variant/utility_functions.hpp"
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/variant/builtin_types.hpp>
@@ -51,6 +54,26 @@
 using namespace godot;
 
 namespace gode {
+
+static std::unordered_map<std::string, ClassInfo> class_registry;
+static std::vector<ClassInfo> class_list;
+
+void register_class(const std::string &name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper) {
+	ClassInfo info = { ref, unwrapper, wrapper };
+	class_registry[name] = info;
+	class_list.push_back(info);
+}
+
+godot::Object *unwrap_godot_object(const Napi::Object &obj) {
+	for (const auto &info : class_list) {
+		if (!info.constructor || info.constructor->IsEmpty())
+			continue;
+		if (obj.InstanceOf(info.constructor->Value())) {
+			return info.unwrapper(obj);
+		}
+	}
+	return nullptr;
+}
 
 Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 	switch (variant.get_type()) {
@@ -105,8 +128,21 @@ Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 			if (!obj) {
 				return env.Null();
 			}
-			// TODO: Find correct binding class for object instance and wrap it
-			// For now return null or generic wrapper if available
+
+			std::string class_name = obj->get_class().utf8().get_data();
+			if (class_registry.find(class_name) != class_registry.end()) {
+				ClassInfo &info = class_registry[class_name];
+				if (info.constructor && !info.constructor->IsEmpty()) {
+					Napi::Object js_obj = info.constructor->Value().New({});
+					if (info.wrapper) {
+						info.wrapper(js_obj, obj);
+					}
+					return js_obj;
+				}
+			}
+
+			// If exact match fails, we could try parent classes if we had inheritance info.
+			// For now, return generic object or null.
 			return env.Null();
 		}
 
@@ -114,6 +150,12 @@ Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 			return env.Undefined();
 	}
 }
+
+#define BIND_NAPI_TO_BUILTIN(BindingClass) \
+	if (obj.InstanceOf(BindingClass::constructor.Value())) { \
+		BindingClass *binding = BindingClass::Unwrap(obj); \
+		return binding->instance; \
+	}
 
 godot::Variant napi_to_godot(const Napi::Value &value) {
 	if (value.IsNumber()) {
@@ -124,8 +166,45 @@ godot::Variant napi_to_godot(const Napi::Value &value) {
 		return String::utf8(value.ToString().Utf8Value().c_str());
 	} else if (value.IsObject()) {
 		Napi::Object obj = value.As<Napi::Object>();
-		// Detect specific types or return Dictionary
-		// TODO: Check if it's a wrapped Godot object
+		
+		BIND_NAPI_TO_BUILTIN(Vector2Binding)
+		BIND_NAPI_TO_BUILTIN(Vector2iBinding)
+		BIND_NAPI_TO_BUILTIN(Rect2Binding)
+		BIND_NAPI_TO_BUILTIN(Rect2iBinding)
+		BIND_NAPI_TO_BUILTIN(Vector3Binding)
+		BIND_NAPI_TO_BUILTIN(Vector3iBinding)
+		BIND_NAPI_TO_BUILTIN(Transform2DBinding)
+		BIND_NAPI_TO_BUILTIN(Vector4Binding)
+		BIND_NAPI_TO_BUILTIN(Vector4iBinding)
+		BIND_NAPI_TO_BUILTIN(PlaneBinding)
+		BIND_NAPI_TO_BUILTIN(QuaternionBinding)
+		BIND_NAPI_TO_BUILTIN(AABBBinding)
+		BIND_NAPI_TO_BUILTIN(BasisBinding)
+		BIND_NAPI_TO_BUILTIN(Transform3DBinding)
+		BIND_NAPI_TO_BUILTIN(ProjectionBinding)
+		BIND_NAPI_TO_BUILTIN(ColorBinding)
+		BIND_NAPI_TO_BUILTIN(NodePathBinding)
+		BIND_NAPI_TO_BUILTIN(RIDBinding)
+		BIND_NAPI_TO_BUILTIN(CallableBinding)
+		BIND_NAPI_TO_BUILTIN(SignalBinding)
+		BIND_NAPI_TO_BUILTIN(DictionaryBinding)
+		BIND_NAPI_TO_BUILTIN(ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedByteArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedInt32ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedInt64ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedFloat32ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedFloat64ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedStringArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedVector2ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedVector3ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedVector4ArrayBinding)
+		BIND_NAPI_TO_BUILTIN(PackedColorArrayBinding)
+
+		godot::Object *obj_inst = unwrap_godot_object(obj);
+		if (obj_inst) {
+			return godot::Variant(obj_inst);
+		}
+
 		return godot::Variant();
 	} else {
 		return godot::Variant();

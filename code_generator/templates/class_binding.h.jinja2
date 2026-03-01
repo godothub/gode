@@ -12,6 +12,9 @@ class {{ class_name }}Binding : public Napi::ObjectWrap<{{ class_name }}Binding>
 
 public:
 	godot::{{ godot_class_name }} *instance;
+    // Create Singleton
+    static Napi::Object create_singleton(Napi::Env env, godot::{{ godot_class_name }}* instance);
+
     static Napi::FunctionReference constructor;
     using Napi::ObjectWrap<{{ class_name }}Binding>::Unwrap; // Ensure Unwrap is accessible if needed, though usually handled by base
     
@@ -19,6 +22,9 @@ public:
     static Napi::Function get_class_constructor(Napi::Env env);
     {{ class_name }}Binding(const Napi::CallbackInfo& info);
     
+    // ToString
+    static Napi::Value _to_string(const Napi::CallbackInfo& info);
+
     // Methods
     {% for method in methods %}
     static Napi::Value {{ method.name_cpp }}(const Napi::CallbackInfo& info);

@@ -125,9 +125,21 @@ void TestRunner::run_tests() {
 				// Additional tests
 				const pos = sprite.get_position();
 				console.log('  Sprite2D position:', pos);
-				// Check if Vector2 is returned correctly (assuming get_position returns Vector2)
-				// Note: Vector2 binding might need verification
-				
+                
+                // Test global singletons
+                console.log('  Testing Singletons:');
+                console.log('  Input:', Input);
+                console.log('  Engine:', Engine);
+                
+                //if (Input) {
+                //    const isPressed = Input.is_action_pressed('ui_accept');
+                //   console.log('  Input.is_action_pressed("ui_accept"):', isPressed);
+                //}
+                
+                if (Engine) {
+                     console.log('  Engine.get_version_info():', Engine.get_version_info());
+                }
+
 			} catch (e) {
 				console.log('  (Sprite2D test failed: ' + e.message + ')');
 				throw e;
@@ -136,16 +148,18 @@ void TestRunner::run_tests() {
 
 		test('Vector2 Binding', () => {
 			try {
-				if (Vector2) {
-					const v = new Vector2(10, 20);
-					assert.strictEqual(v.x, 10, 'Vector2.x should be 10');
-					assert.strictEqual(v.y, 20, 'Vector2.y should be 20');
-					console.log('  Vector2 created:', v.x, v.y);
-				} else {
-					console.log('  (Vector2 not available)');
-				}
+                // Vector2 is a global builtin
+                const v = new Vector2(10, 20);
+                assert.strictEqual(v.x, 10, 'Vector2.x should be 10');
+                assert.strictEqual(v.y, 20, 'Vector2.y should be 20');
+                
+                console.log('  Vector2 string:', v.toString());
+                console.log('  Vector2 inspect:', v);
+                
+                assert.ok(v.toString().includes('10.0, 20.0'), 'toString should contain values');
 			} catch (e) {
 				console.log('  (Vector2 test failed: ' + e.message + ')');
+                throw e;
 			}
 		});
 

@@ -13,6 +13,11 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
         {% for method in methods %}
         InstanceMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name_cpp }}),
         {% endfor %}
+        InstanceMethod("toString", &{{ class_name }}Binding::_to_string),
+        InstanceMethod(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), &{{ class_name }}Binding::_to_string),
+        {% for member in members %}
+        InstanceAccessor("{{ member.name }}", &{{ class_name }}Binding::{{ member.getter }}, &{{ class_name }}Binding::{{ member.setter }}),
+        {% endfor %}
     });
 
     constructor = Napi::Persistent(func);
@@ -22,7 +27,28 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
     return exports;
 }
 
-{{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) { }
+{{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) {
+    Napi::Env env = info.Env();
+    if (info.Length() == 0) {
+        return;
+    }
+
+    {% for constructor in constructors %}
+    if (info.Length() == {{ constructor.arguments|length }}) {
+        instance = godot::{{ class_name }}(
+        {% for arg in constructor.arguments %}
+            gode::napi_to_godot<{{ arg.type_cpp }}>(info[{{ loop.index0 }}]){% if not loop.last %}, {% endif %}
+        {% endfor %}
+        );
+        return;
+    }
+    {% endfor %}
+}
+
+Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) {
+    godot::Variant v = instance;
+    return Napi::String::New(info.Env(), v.stringify().utf8().get_data());
+}
 
 {% for method in methods %}
 Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackInfo& info) {
@@ -94,6 +120,24 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
                 {% endif %}
             {% endif %}
         {% endif %}
+    {% endif %}
+}
+{% endfor %}
+
+{% for member in members %}
+Napi::Value {{ class_name }}Binding::{{ member.getter }}(const Napi::CallbackInfo& info) {
+    {% if member.is_field %}
+    return gode::godot_to_napi(info.Env(), instance.{{ member.mapped_name }});
+    {% else %}
+    return gode::call_builtin_const_method_ret(&godot::{{ class_name }}::{{ member.getter }}, &instance, info);
+    {% endif %}
+}
+
+void {{ class_name }}Binding::{{ member.setter }}(const Napi::CallbackInfo& info, const Napi::Value& value) {
+    {% if member.is_field %}
+    instance.{{ member.mapped_name }} = gode::napi_to_godot<{{ member.type_cpp }}>(value);
+    {% else %}
+    gode::call_builtin_method_no_ret(&godot::{{ class_name }}::{{ member.setter }}, &instance, info, value);
     {% endif %}
 }
 {% endfor %}
