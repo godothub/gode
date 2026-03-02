@@ -2,13 +2,13 @@
 #define GODE_UTILS_VALUE_CONVER_H
 
 #include <napi.h>
-#include <godot_cpp/variant/builtin_types.hpp>
-#include <godot_cpp/core/type_info.hpp>
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/core/type_info.hpp>
+#include <godot_cpp/variant/builtin_types.hpp>
 
 namespace gode {
-extern Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant);
-extern godot::Variant napi_to_godot(const Napi::Value &value);
+extern Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant);
+extern godot::Variant napi_to_godot(Napi::Value value);
 
 typedef godot::Object *(*UnwrapFunc)(const Napi::Object &);
 typedef void (*WrapFunc)(const Napi::Object &, godot::Object *);
@@ -33,7 +33,7 @@ template <typename T>
 inline constexpr bool is_bitfield_v = is_bitfield<T>::value;
 
 template <typename T>
-std::remove_const_t<std::remove_reference_t<T>> napi_to_godot(const Napi::Value &value) {
+std::remove_const_t<std::remove_reference_t<T>> napi_to_godot(Napi::Value value) {
 	using ClearType = std::remove_const_t<std::remove_reference_t<T>>;
 
 	if constexpr (std::is_same_v<ClearType, bool>) {

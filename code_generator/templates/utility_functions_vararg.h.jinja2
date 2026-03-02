@@ -9,7 +9,7 @@ namespace utility {
 {% for func in utility_functions %}
     {% if func.is_vararg %}
         {% if func.has_return_value %}
-DEFINE_VARARG_FUNC_RET({{ func.name }}, {{ func.hash }})
+DEFINE_VARARG_FUNC_RET({{ func.name }}, {{ func.hash }}, {{ func.return_type }})
         {% else %}
 DEFINE_VARARG_FUNC_VOID({{ func.name }}, {{ func.hash }})
         {% endif %}

@@ -66,8 +66,9 @@ void register_class(const std::string &name, Napi::FunctionReference *ref, Unwra
 
 godot::Object *unwrap_godot_object(const Napi::Object &obj) {
 	for (const auto &info : class_list) {
-		if (!info.constructor || info.constructor->IsEmpty())
+		if (!info.constructor || info.constructor->IsEmpty()) {
 			continue;
+		}
 		if (obj.InstanceOf(info.constructor->Value())) {
 			return info.unwrapper(obj);
 		}
@@ -75,7 +76,7 @@ godot::Object *unwrap_godot_object(const Napi::Object &obj) {
 	return nullptr;
 }
 
-Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
+Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant) {
 	switch (variant.get_type()) {
 		case godot::Variant::Type::NIL:
 			return env.Null();
@@ -86,7 +87,6 @@ Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 		case godot::Variant::Type::BOOL:
 			return Napi::Boolean::New(env, variant.operator bool());
 		case godot::Variant::Type::STRING:
-			return Napi::String::New(env, variant.operator String().utf8().get_data());
 		case godot::Variant::Type::STRING_NAME:
 			return Napi::String::New(env, variant.operator String().utf8().get_data());
 
@@ -151,13 +151,13 @@ Napi::Value godot_to_napi(Napi::Env env, const godot::Variant &variant) {
 	}
 }
 
-#define BIND_NAPI_TO_BUILTIN(BindingClass) \
+#define BIND_NAPI_TO_BUILTIN(BindingClass)                   \
 	if (obj.InstanceOf(BindingClass::constructor.Value())) { \
-		BindingClass *binding = BindingClass::Unwrap(obj); \
-		return binding->instance; \
+		BindingClass *binding = BindingClass::Unwrap(obj);   \
+		return binding->instance;                            \
 	}
 
-godot::Variant napi_to_godot(const Napi::Value &value) {
+godot::Variant napi_to_godot(Napi::Value value) {
 	if (value.IsNumber()) {
 		return value.ToNumber().DoubleValue();
 	} else if (value.IsBoolean()) {
@@ -166,7 +166,7 @@ godot::Variant napi_to_godot(const Napi::Value &value) {
 		return String::utf8(value.ToString().Utf8Value().c_str());
 	} else if (value.IsObject()) {
 		Napi::Object obj = value.As<Napi::Object>();
-		
+
 		BIND_NAPI_TO_BUILTIN(Vector2Binding)
 		BIND_NAPI_TO_BUILTIN(Vector2iBinding)
 		BIND_NAPI_TO_BUILTIN(Rect2Binding)

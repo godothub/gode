@@ -1,4 +1,9 @@
-export default class NewScript {
-    var my_variable = 0;
+const gode = require('gode');
 
+class NewScript extends gode.Node2D {
+	_ready() {
+		GD.print("NewScript _ready");
+	}
 }
+
+module.exports = NewScript;

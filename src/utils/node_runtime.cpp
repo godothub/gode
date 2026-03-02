@@ -1,7 +1,7 @@
 #include "utils/node_runtime.h"
-#include "utility_functions/utility_functions.h"
 #include "register_builtin.gen.h"
 #include "register_classes.gen.h"
+#include "utility_functions/utility_functions.h"
 #include <cppgc/platform.h>
 #include <node.h>
 #include <node_api.h>
@@ -115,8 +115,8 @@ void NodeRuntime::init_once() {
 		}
 	}
 #else
-	// Warn about ABI incompatibility when using MinGW/GCC on Windows
-	#pragma message("WARNING: Skipping node::InitializeOncePerProcess due to ABI incompatibility (Non-MSVC compiler). Node.js embedding may fail.")
+// Warn about ABI incompatibility when using MinGW/GCC on Windows
+#pragma message("WARNING: Skipping node::InitializeOncePerProcess due to ABI incompatibility (Non-MSVC compiler). Node.js embedding may fail.")
 #endif
 
 	allocator = node::ArrayBufferAllocator::Create();
@@ -147,19 +147,17 @@ void NodeRuntime::init_once() {
 				"const path = require('path');"
 				"const fs = require('fs');"
 				"const gode = process._linkedBinding('gode');"
-                // Register 'gode' in Module._cache so require('gode') works
-                // We create a fake module with id 'gode'
-                "try {"
-                "  const _gode_module = new Module('gode');"
-                "  _gode_module.id = 'gode';"
-                "  _gode_module.exports = gode;"
-                "  _gode_module.loaded = true;"
-                "  _gode_module.filename = 'gode';"
-                "  Module._cache['gode'] = _gode_module;"
-                "} catch (e) {"
-                "  console.error('[Gode] Injection error:', e);"
-                "}"
-                ""
+				"try {"
+				"  const _gode_module = new Module('gode');"
+				"  _gode_module.id = 'gode';"
+				"  _gode_module.exports = gode;"
+				"  _gode_module.loaded = true;"
+				"  _gode_module.filename = 'gode';"
+				"  Module._cache['gode'] = _gode_module;"
+				"} catch (e) {"
+				"  console.error('[Gode] Injection error:', e);"
+				"}"
+				""
 				"const originalReadFileSync = fs.readFileSync;"
 				"fs.readFileSync = function(p, options) {"
 				"  if (typeof p === 'string' && p.startsWith('res://')) {"
@@ -209,37 +207,54 @@ void NodeRuntime::init_once() {
 				"  return originalFindPath.call(Module, request, paths, isMain);"
 				"};"
 				""
+				"const originalResolveFilename = Module._resolveFilename;"
+				"Module._resolveFilename = function(request, parent, isMain, options) {"
+				"  if (request.startsWith('res://')) {"
+				"    return request;"
+				"  }"
+				"  if (parent && parent.filename && parent.filename.startsWith('res://')) {"
+				"    if (request.startsWith('./') || request.startsWith('../')) {"
+				"      const parentDir = path.dirname(parent.filename);"
+				"      return path.resolve(parentDir, request);"
+				"    }"
+				"  }"
+				"  return originalResolveFilename.call(Module, request, parent, isMain, options);"
+				"};"
+				""
 				"globalThis.__gode_compile = function(code, filename) {"
 				"  try {"
 				"    const m = new Module(filename, module);"
 				"    m.filename = filename;"
 				"    m.paths = Module._nodeModulePaths(path.dirname(filename));"
 				"    m._compile(code, filename);"
+				"    console.log('Gode compiled exports:', m.exports);"
 				"    return m.exports;"
 				"  } catch (e) {"
 				"    console.error('Gode compile error:', e);"
-				"    return undefined;"
+				"    return e;" // Return error object on failure? No, caller expects undefined or exports.
+				// If we return undefined, C++ sees it as empty?
+				// compile_script checks result.IsEmpty().
+				// But fn->Call returns undefined (as Value) if the function returns undefined.
+				// Wait, if function returns undefined, Call returns a Local<Value> wrapping undefined.
+				// It is NOT Empty.
 				"  }"
 				"};"
-                // Wrap require to handle 'gode' specially if built-in mechanism fails
-                "const originalRequire = Module.prototype.require;"
-                "Module.prototype.require = function(id) {"
-                "  if (id === 'gode') {"
-                "    return gode;"
-                "  }"
-                "  return originalRequire.call(this, id);"
-                "};"
-                // Override global require as well, just in case
-                "const originalGlobalRequire = globalThis.require || Module.createRequire(process.cwd());"
-                "globalThis.require = function(id) {"
-                "  if (id === 'gode') {"
-                "    return gode;"
-                "  }"
-                "  return originalGlobalRequire.call(this, id);"
-                "};"
-                // Copy properties to keep compatibility
-                "if (originalGlobalRequire) Object.assign(globalThis.require, originalGlobalRequire);";
-                // "globalThis.require = require;";
+				"const originalRequire = Module.prototype.require;"
+				"Module.prototype.require = function(id) {"
+				"  if (id === 'gode') {"
+				"    return gode;"
+				"  }"
+				"  return originalRequire.call(this, id);"
+				"};"
+				"const originalGlobalRequire = globalThis.require || Module.createRequire(process.cwd());"
+				"globalThis.require = function(id) {"
+				"  if (id === 'gode') {"
+				"    return gode;"
+				"  }"
+				"  return originalGlobalRequire.call(this, id);"
+				"};"
+				"if (originalGlobalRequire) Object.assign(globalThis.require, originalGlobalRequire);";
+		// "globalThis.require = require;";
 
 		node::LoadEnvironment(env, boot_script.c_str());
 
@@ -274,23 +289,19 @@ void NodeRuntime::run_script(const std::string &code) {
 	if (result.IsEmpty()) {
 		return;
 	}
-
-	// Spin the event loop to ensure async operations complete if needed
-	// Note: In a real game engine integration, you'd likely want to integrate
-	// the event loop with the game loop rather than blocking here.
-	// node::SpinEventLoop(env).ToChecked();
 }
 
 Napi::Value NodeRuntime::compile_script(const std::string &code, const std::string &filename) {
 	if (!node_initialized) {
 		init_once();
 	}
-
+	// Removed v8::Locker because it causes memory errors in some configurations
 	v8::Isolate::Scope isolate_scope(isolate);
-	v8::EscapableHandleScope handle_scope(isolate);
 
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
+
+	v8::EscapableHandleScope escapable_scope(isolate);
 
 	v8::Local<v8::String> fn_name = v8::String::NewFromUtf8Literal(isolate, "__gode_compile");
 	v8::Local<v8::Value> fn_val;
@@ -307,24 +318,72 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 
 	v8::MaybeLocal<v8::Value> result = fn->Call(context, context->Global(), 2, args);
 
+	// Check if Call succeeded
 	if (result.IsEmpty()) {
+		godot::UtilityFunctions::print("compile_script: fn->Call returned empty (exception?)");
 		return Napi::Value();
 	}
 
 	v8::Local<v8::Value> final_exports = result.ToLocalChecked();
-	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*handle_scope.Escape(final_exports)));
+
+	// Debug result type
+	// godot::UtilityFunctions::print("compile_script: final_exports IsUndefined: ", final_exports->IsUndefined());
+	// godot::UtilityFunctions::print("compile_script: final_exports IsNull: ", final_exports->IsNull());
+	// godot::UtilityFunctions::print("compile_script: final_exports IsObject: ", final_exports->IsObject());
+	// godot::UtilityFunctions::print("compile_script: final_exports IsFunction: ", final_exports->IsFunction());
+
+	if (final_exports->IsUndefined()) {
+		v8::Local<v8::Value> undefined_val = v8::Undefined(isolate);
+		// If we are here, it means JS returned undefined, BUT JS log said it returned a class!
+		// This is extremely weird.
+
+		// Maybe the HandleScope in JavascriptInstance::compile_module is not enough?
+		// No, that handles the return value lifetime.
+
+		// Maybe `fn->Call` logic is somehow flawed?
+		// We pass context->Global() as receiver. `globalThis.__gode_compile` expects global as `this`?
+		// Yes.
+
+		// Maybe `args` are wrong?
+		// code and filename strings. They seem fine.
+
+		// Is it possible that `result` handle is somehow invalidated immediately?
+		// We are inside `escapable_scope`.
+
+		return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(undefined_val)));
+	}
+
+	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(final_exports)));
 }
 
 Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
-	if (module_exports.IsEmpty() || !module_exports.IsObject()) {
+	v8::Isolate::Scope isolate_scope(isolate);
+	v8::EscapableHandleScope escapable_scope(isolate);
+	v8::Local<v8::Context> context = node_context.Get(isolate);
+	v8::Context::Scope context_scope(context);
+
+	if (module_exports.IsEmpty()) {
+		godot::UtilityFunctions::print("get_default_class: module_exports is Empty");
+		return Napi::Function();
+	}
+
+	if (module_exports.IsUndefined()) {
+		godot::UtilityFunctions::print("get_default_class: module_exports is Undefined");
 		return Napi::Function();
 	}
 
 	Napi::Object exports_obj = module_exports.As<Napi::Object>();
+
+	if (module_exports.IsFunction()) {
+		return module_exports.As<Napi::Function>();
+	}
+
 	if (exports_obj.Has("default")) {
 		Napi::Value default_export = exports_obj.Get("default");
 		if (default_export.IsFunction()) {
-			return default_export.As<Napi::Function>();
+			v8::Local<v8::Value> v8_val = *reinterpret_cast<v8::Local<v8::Value> *>(static_cast<napi_value>(default_export));
+			v8::Local<v8::Value> escaped_val = escapable_scope.Escape(v8_val);
+			return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escaped_val)).As<Napi::Function>();
 		}
 	}
 
@@ -332,29 +391,17 @@ Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
 }
 
 void NodeRuntime::spin_loop() {
-    if (!node_initialized || !env) {
-        return;
-    }
+	if (!node_initialized || !env) {
+		return;
+	}
 
-    v8::Isolate::Scope isolate_scope(isolate);
-    v8::HandleScope handle_scope(isolate);
-    
-    // We need a context scope to run the loop? 
-    // uv_run doesn't necessarily need v8 context, but node::CallbackScope might.
-    // Let's ensure we are in the correct context.
-    v8::Local<v8::Context> context = node_context.Get(isolate);
-    v8::Context::Scope context_scope(context);
+	v8::Isolate::Scope isolate_scope(isolate);
+	v8::HandleScope handle_scope(isolate);
 
-    // Run the event loop in non-blocking mode
-    // UV_RUN_NOWAIT: Poll for i/o once and returns immediately.
-    // This will process timers, pending callbacks, idle handles, prepare handles, i/o, check handles.
-    // It returns non-zero if there are still active handles or requests.
-    uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-    
-    // Drain microtasks (Promises)
-    // Node.js usually handles this automatically in the loop, but sometimes explicit drain is needed 
-    // if we are driving it manually from outside.
-    // isolate->PerformMicrotaskCheckpoint(); // Use this if promises are not resolving
+	v8::Local<v8::Context> context = node_context.Get(isolate);
+	v8::Context::Scope context_scope(context);
+
+	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
 }
 
 void NodeRuntime::shutdown() {
@@ -363,13 +410,9 @@ void NodeRuntime::shutdown() {
 	}
 
 	if (env) {
-		// Stop the environment first (this stops worker threads)
-		// We need to be in the isolate scope to perform cleanup
 		v8::Isolate::Scope isolate_scope(isolate);
 		v8::HandleScope handle_scope(isolate);
 
-		// Run the event loop one last time to process any pending finalizers or callbacks
-		// This can help ensure that resources are properly cleaned up before FreeEnvironment
 		{
 			v8::Context::Scope context_scope(node_context.Get(isolate));
 			node::SpinEventLoop(env).ToChecked();
@@ -380,7 +423,7 @@ void NodeRuntime::shutdown() {
 		env = nullptr;
 	}
 
-	node_context.Reset(); // Dispose context AFTER freeing environment
+	node_context.Reset();
 
 	if (isolate_data) {
 		node::FreeIsolateData(isolate_data);

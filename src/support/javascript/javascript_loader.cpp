@@ -1,4 +1,6 @@
 ﻿#include "support/javascript/javascript_loader.h"
+
+#include "godot_cpp/classes/resource_uid.hpp"
 #include "support/javascript/javascript.h"
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -56,7 +58,7 @@ String JavascriptLoader::_get_resource_script_class(const String &p_path) const 
 }
 
 int64_t JavascriptLoader::_get_resource_uid(const String &p_path) const {
-	return 0;
+	return ResourceUID::get_singleton()->text_to_id(p_path);
 }
 
 PackedStringArray JavascriptLoader::_get_dependencies(const String &p_path, bool p_add_types) const {

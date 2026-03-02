@@ -176,10 +176,15 @@ static void javascript_instance_call(GDExtensionScriptInstanceDataPtr p_self, GD
 		return;
 	}
 	const StringName &method = *reinterpret_cast<const StringName *>(p_method);
-	const Variant *args = *reinterpret_cast<const Variant *const *>(p_args);
+	const Variant *args = nullptr;
+	int32_t argc = 0;
+	if (p_args && p_argument_count > 0) {
+		args = *reinterpret_cast<const Variant *const *>(p_args);
+		argc = (int32_t)p_argument_count;
+	}
 	GDExtensionCallError local_error;
 	GDExtensionCallError &err = r_error ? *r_error : local_error;
-	Variant ret = instance->call(method, args, (int32_t)p_argument_count, err);
+	Variant ret = instance->call(method, args, argc, err);
 	if (r_return) {
 		*reinterpret_cast<Variant *>(r_return) = ret;
 	}

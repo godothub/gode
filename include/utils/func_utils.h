@@ -5,6 +5,7 @@
 #include "godot_cpp/variant/variant.hpp"
 #include "utils/value_convert.h"
 #include <napi.h>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <type_traits>
 #include <vector>
 
@@ -18,7 +19,9 @@ inline T convert_arg(const godot::Variant &v) {
 		return reinterpret_cast<T>(static_cast<godot::Object *>(v));
 	} else if constexpr (std::is_same_v<T, char> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t> || std::is_same_v<T, wchar_t>) {
 		godot::String s = v;
-		if (s.length() == 0) return static_cast<T>(0);
+		if (s.length() == 0) {
+			return static_cast<T>(0);
+		}
 		return static_cast<T>(s[0]);
 	} else {
 		return static_cast<T>(v);
@@ -75,7 +78,6 @@ inline Napi::Value call_builtin_static_vararg_method_no_ret(void (*Func)(const g
 	Func((const godot::Variant **)arg_ptrs.data(), (GDExtensionInt)arg_ptrs.size());
 	return info.Env().Undefined();
 }
-
 template <typename R>
 inline Napi::Value call_builtin_static_vararg_method_ret(R (*Func)(const godot::Variant **, GDExtensionInt), const Napi::CallbackInfo &info) {
 	std::vector<Napi::Value> args = to_args_array(info);
@@ -252,8 +254,8 @@ inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), T *instance
 
 template <typename T, typename... P>
 inline Napi::Value call_builtin_method_no_ret(void (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info, const Napi::Value &val) {
-    (instance->*Func)(napi_to_godot<P>(val)...);
-    return info.Env().Undefined();
+	(instance->*Func)(napi_to_godot<P>(val)...);
+	return info.Env().Undefined();
 }
 
 template <typename T, typename R, typename... P, std::size_t... Is>

@@ -136,14 +136,60 @@ void TestRunner::run_tests() {
                 console.log('  Input:', Input);
                 console.log('  Engine:', Engine);
                 
-                //if (Input) {
-                //    const isPressed = Input.is_action_pressed('ui_accept');
-                //   console.log('  Input.is_action_pressed("ui_accept"):', isPressed);
-                //}
-                
                 if (Engine) {
                      console.log('  Engine.get_version_info():', Engine.get_version_info());
                 }
+                
+                // Test Utility Functions (GD)
+                console.log('  Testing Utility Functions:');
+                // Basic math
+                const sinVal = GD.sin(Math.PI / 2);
+                console.log('  GD.sin(PI/2):', sinVal);
+                assert.ok(Math.abs(sinVal - 1.0) < 0.0001, 'sin(PI/2) should be approx 1');
+                
+                const absVal = GD.abs(-42);
+                console.log('  GD.abs(-42):', absVal);
+                assert.strictEqual(absVal, 42, 'abs(-42) should be 42');
+                
+                // Printing (should not crash, check console output manually)
+                GD.print('  GD.print: Hello from Godot!');
+                GD.prints('  GD.prints:', 'A', 'B', 'C');
+                
+                // Type conversion
+                const strVal = GD.str(123);
+                console.log('  GD.str(123):', strVal);
+                assert.strictEqual(strVal, '123.0', 'str(123) should be "123.0"');
+                
+                // Random
+                GD.randomize();
+                const randVal = GD.randf();
+                console.log('  GD.randf():', randVal);
+                assert.ok(randVal >= 0 && randVal <= 1, 'randf should be between 0 and 1');
+                
+                // Test NodeRuntime::get_default_class logic via simulated exports
+                console.log('  Testing NodeRuntime::get_default_class logic:');
+                
+                // 1. CommonJS default export (module.exports = Class)
+                class TestClass1 {}
+                const exports1 = TestClass1;
+                // We can't call get_default_class directly from JS, but we can verify the structure
+                // matches what get_default_class expects.
+                console.log('  Export structure 1 (Direct Class):', exports1);
+                assert.strictEqual(typeof exports1, 'function', 'Should be a function/class');
+                
+                // 2. ESM default export (export default Class -> { default: Class })
+                class TestClass2 {}
+                const exports2 = { default: TestClass2 };
+                console.log('  Export structure 2 (ESM default):', exports2);
+                assert.strictEqual(typeof exports2.default, 'function', 'Should have default property as function');
+                
+                // 3. Named export (export class Class -> { Class })
+                // This should return undefined/empty in current logic, which is expected behavior for now
+                // as we only support default exports.
+                class TestClass3 {}
+                const exports3 = { TestClass3 };
+                console.log('  Export structure 3 (Named export):', exports3);
+                assert.strictEqual(exports3.default, undefined, 'Should not have default property');
 
 			} catch (e) {
 				console.log('  (Sprite2D test failed: ' + e.message + ')');

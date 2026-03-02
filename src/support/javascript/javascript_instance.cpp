@@ -19,15 +19,28 @@ bool JavascriptInstance::compile_module() {
 		return false;
 	}
 
-	String abs_path = ProjectSettings::get_singleton()->globalize_path(path);
+    // Convert res:// path to absolute file system path
+    // Node.js module system requires absolute paths to handle dependencies and caching correctly
+    // especially when dealing with ESM/CJS interop which might try to convert paths to URLs.
+    // While users might prefer res:// in stack traces, Node.js internals (pathToFileURL) will crash
+    // if given a non-file path when ESM logic is triggered.
+    // The safest way is to use the real OS path.
+    String abs_path = ProjectSettings::get_singleton()->globalize_path(path);
+
+    // We MUST have a HandleScope here because compile_script returns a Napi::Value that wraps a v8::Local handle.
+    // That handle must be allocated in a scope that outlives the call.
+    // Since compile_script creates its own scopes and then escapes the handle, 
+    // the escaped handle lands in the CURRENT HandleScope.
+    // If there is no current HandleScope, the handle is invalid or leaks (depending on V8 version).
+    Napi::HandleScope scope(JsEnvManager::get_env());
 	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), abs_path.utf8().get_data());
-	
 	Napi::Function default_class = NodeRuntime::get_default_class(exports);
 	if (default_class.IsEmpty()) {
 		return false;
 	}
 
-	Napi::Object instance = default_class.New({});
+    Napi::Value external_owner = Napi::External<godot::Object>::New(JsEnvManager::get_env(), owner);
+	Napi::Object instance = default_class.New({external_owner});
 	js_instance = Napi::Persistent(instance);
 	return true;
 }

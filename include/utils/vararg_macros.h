@@ -14,13 +14,13 @@ inline void m_name##_internal(const godot::Variant **p_args, GDExtensionInt p_ar
 	_gde_function(&ret, reinterpret_cast<GDExtensionConstVariantPtr *>(p_args), p_arg_count); \
 }
 
-#define DEFINE_UTILITY_INTERNAL_RET(m_name, m_hash) \
+#define DEFINE_UTILITY_INTERNAL_RET(m_name, m_hash, m_type) \
 inline godot::Variant m_name##_internal(const godot::Variant **p_args, GDExtensionInt p_arg_count) { \
 	static GDExtensionPtrUtilityFunction _gde_function = ::godot::gdextension_interface::variant_get_ptr_utility_function(godot::StringName(#m_name)._native_ptr(), m_hash); \
 	CHECK_METHOD_BIND_RET(_gde_function, godot::Variant()); \
-	godot::Variant ret; \
+	m_type ret; \
 	_gde_function(&ret, reinterpret_cast<GDExtensionConstVariantPtr *>(p_args), p_arg_count); \
-	return ret; \
+	return godot::Variant(ret); \
 }
 
 // Macro to define the vector wrapper (converts vector to array and calls internal)
@@ -60,11 +60,9 @@ inline godot::Variant m_name(const godot::Variant &arg, const std::vector<godot:
 // Combined macros
 #define DEFINE_VARARG_FUNC_VOID(m_name, m_hash) \
     DEFINE_UTILITY_INTERNAL_VOID(m_name, m_hash) \
-    DEFINE_VECTOR_WRAPPER_VOID(m_name)
 
-#define DEFINE_VARARG_FUNC_RET(m_name, m_hash) \
-    DEFINE_UTILITY_INTERNAL_RET(m_name, m_hash) \
-    DEFINE_VECTOR_WRAPPER_RET(m_name)
+#define DEFINE_VARARG_FUNC_RET(m_name, m_hash, m_type) \
+    DEFINE_UTILITY_INTERNAL_RET(m_name, m_hash, m_type) \
 
 #define DEFINE_BUILTIN_VARARG_METHOD_VOID(m_class, m_name, m_hash, m_type_constant) \
 inline void m_name##_internal(godot::m_class *p_instance, const godot::Variant **p_args, GDExtensionInt p_arg_count) { \
