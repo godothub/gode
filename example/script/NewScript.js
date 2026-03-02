@@ -6,4 +6,4 @@ class NewScript extends godot.Node2D {
 	}
 }
 
-module.exports = NewScript;
+module.exports = { default: NewScript };

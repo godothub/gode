@@ -21,10 +21,9 @@ bool JavascriptInstance::compile_module() {
 		return false;
 	}
 
-	// Ensure V8 isolate is locked
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	Napi::HandleScope scope(JsEnvManager::get_env());
+	v8::HandleScope scope(NodeRuntime::isolate);
 
 	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), path.utf8().get_data());
 	Napi::Function default_class = NodeRuntime::get_default_class(exports);

@@ -290,9 +290,6 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 	if (!node_initialized) {
 		init_once();
 	}
-	// Removed v8::Locker because it causes memory errors in some configurations
-	v8::Isolate::Scope isolate_scope(isolate);
-
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
 
@@ -330,7 +327,6 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 }
 
 Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
-	v8::Isolate::Scope isolate_scope(isolate);
 	v8::EscapableHandleScope escapable_scope(isolate);
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
@@ -353,9 +349,10 @@ Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
 
 	if (exports_obj.Has("default")) {
 		Napi::Value default_export = exports_obj.Get("default");
+		v8::Local<v8::Object> export_obj = reinterpret_cast<v8::Value *>(static_cast<napi_value>(default_export))->ToObject(context).ToLocalChecked();
+		v8::Local<v8::Function> export_func = export_obj.As<v8::Function>();
 		if (default_export.IsFunction()) {
-			v8::Local<v8::Value> v8_val = *reinterpret_cast<v8::Local<v8::Value> *>(static_cast<napi_value>(default_export));
-			v8::Local<v8::Value> escaped_val = escapable_scope.Escape(v8_val);
+			v8::Local<v8::Value> escaped_val = escapable_scope.Escape(export_func);
 			return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escaped_val)).As<Napi::Function>();
 		}
 	}
