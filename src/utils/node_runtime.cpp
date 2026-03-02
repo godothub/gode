@@ -141,20 +141,20 @@ void NodeRuntime::init_once() {
 
 		env = node::CreateEnvironment(isolate_data, context, args, exec_args);
 
-		node::AddLinkedBinding(env, "gode", InitGodeAddon_C, NODE_API_DEFAULT_MODULE_API_VERSION);
+		node::AddLinkedBinding(env, "godot", InitGodeAddon_C, NODE_API_DEFAULT_MODULE_API_VERSION);
 
 		std::string boot_script =
 				"const Module = require('module');"
 				"const path = require('path');"
 				"const fs = require('fs');"
-				"const gode = process._linkedBinding('gode');"
+				"const gode = process._linkedBinding('godot');"
 				"try {"
-				"  const _gode_module = new Module('gode');"
-				"  _gode_module.id = 'gode';"
+				"  const _gode_module = new Module('godot');"
+				"  _gode_module.id = 'godot';"
 				"  _gode_module.exports = gode;"
 				"  _gode_module.loaded = true;"
-				"  _gode_module.filename = 'gode';"
-				"  Module._cache['gode'] = _gode_module;"
+				"  _gode_module.filename = 'godot';"
+				"  Module._cache['godot'] = _gode_module;"
 				"} catch (e) {"
 				"  console.error('[Gode] Injection error:', e);"
 				"}"
@@ -236,14 +236,14 @@ void NodeRuntime::init_once() {
 				"};"
 				"const originalRequire = Module.prototype.require;"
 				"Module.prototype.require = function(id) {"
-				"  if (id === 'gode') {"
+				"  if (id === 'godot') {"
 				"    return gode;"
 				"  }"
 				"  return originalRequire.call(this, id);"
 				"};"
 				"const originalGlobalRequire = globalThis.require || Module.createRequire(process.cwd());"
 				"globalThis.require = function(id) {"
-				"  if (id === 'gode') {"
+				"  if (id === 'godot') {"
 				"    return gode;"
 				"  }"
 				"  return originalGlobalRequire.call(this, id);"

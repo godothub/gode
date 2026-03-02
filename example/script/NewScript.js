@@ -1,6 +1,6 @@
-const gode = require('gode');
+const godot = require('godot');
 
-class NewScript extends gode.Node2D {
+class NewScript extends godot.Node2D {
 	_ready() {
 		GD.print("NewScript _ready");
 	}

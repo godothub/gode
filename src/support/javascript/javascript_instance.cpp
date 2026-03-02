@@ -2,7 +2,6 @@
 
 #include "godot_cpp/classes/engine.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
-#include "godot_cpp/variant/utility_functions.hpp"
 #include "utils/node_runtime.h"
 #include "utils/value_convert.h"
 #include "v8-isolate.h"
@@ -27,8 +26,7 @@ bool JavascriptInstance::compile_module() {
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	Napi::HandleScope scope(JsEnvManager::get_env());
 
-	String abs_path = ProjectSettings::get_singleton()->globalize_path(path);
-	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), abs_path.utf8().get_data());
+	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), path.utf8().get_data());
 	Napi::Function default_class = NodeRuntime::get_default_class(exports);
 	if (default_class.IsEmpty()) {
 		return false;
