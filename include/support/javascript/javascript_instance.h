@@ -9,8 +9,8 @@ namespace gode {
 class JavascriptInstance {
 	godot::Ref<Javascript> javascript;
 	godot::Object *owner = nullptr;
-	bool placeholder = false;
 	Napi::ObjectReference js_instance;
+	bool placeholder = false;
 
 	friend class JavascriptInstanceInfo;
 

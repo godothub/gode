@@ -1,50 +1,41 @@
 #include "support/javascript/javascript_instance.h"
 
-#include "godot_cpp/classes/engine.hpp"
-#include "godot_cpp/classes/project_settings.hpp"
 #include "utils/node_runtime.h"
 #include "utils/value_convert.h"
-#include "v8-isolate.h"
-#include "v8-locker.h"
+#include <v8-isolate.h>
+#include <v8-locker.h>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 
 using namespace godot;
 
 namespace gode {
-bool JavascriptInstance::compile_module() {
-	if (!javascript.is_valid()) {
-		return false;
-	}
 
-	String source_code = javascript->_get_source_code();
-	String path = javascript->get_path();
-	if (path.is_empty()) {
-		return false;
-	}
-
-	v8::Locker locker(NodeRuntime::isolate);
-	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	v8::HandleScope scope(NodeRuntime::isolate);
-
-	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), path.utf8().get_data());
-	Napi::Function default_class = NodeRuntime::get_default_class(exports);
-	if (default_class.IsEmpty()) {
-		return false;
-	}
-
-	Napi::Value external_owner = Napi::External<godot::Object>::New(JsEnvManager::get_env(), owner);
-	Napi::Object instance = default_class.New({ external_owner });
-	js_instance = Napi::Persistent(instance);
-	return true;
-}
-
-JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Object *p_owner, bool p_placeholder) {
-	javascript = p_javascript;
-	owner = p_owner;
-	placeholder = p_placeholder;
+JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Object *p_owner, bool p_placeholder) :
+		javascript(p_javascript),
+		owner(p_owner),
+		placeholder(p_placeholder) {
 	if (!placeholder) {
-		if (!compile_module()) {
-			ERR_PRINT("Failed to compile module.");
+		if (!javascript.is_valid()) {
+			return;
 		}
+
+		if (!javascript->compile()) {
+			return;
+		}
+
+		v8::Locker locker(NodeRuntime::isolate);
+		v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+		Napi::HandleScope scope(JsEnvManager::get_env());
+
+		Napi::Function default_class = javascript->get_default_class();
+		if (default_class.IsEmpty() || default_class.IsUndefined() || default_class.IsNull()) {
+			return;
+		}
+
+		Napi::Value external_owner = Napi::External<godot::Object>::New(JsEnvManager::get_env(), owner);
+		Napi::Object instance = default_class.New({ external_owner });
+		js_instance = Napi::Persistent(instance);
 	}
 }
 
@@ -58,11 +49,15 @@ bool JavascriptInstance::is_placeholder() const {
 
 bool JavascriptInstance::set(const StringName &p_name, const Variant &p_value) {
 	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	return js_instance.Set(String(p_name).utf8().get_data(), godot_to_napi(JsEnvManager::get_env(), p_value));
 }
 
 bool JavascriptInstance::get(const StringName &p_name, Variant &r_value) const {
 	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	Napi::Object obj = js_instance.Value();
 	const char *prop_name = String(p_name).utf8().get_data();
 	if (obj.Has(prop_name)) {

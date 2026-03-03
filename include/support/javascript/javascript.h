@@ -1,73 +1,78 @@
 #ifndef GODOT_GODE_JAVASCRIPT_H
 #define GODOT_GODE_JAVASCRIPT_H
 
+#include "napi.h"
+
 #include <godot_cpp/classes/script_extension.hpp>
 #include <godot_cpp/classes/script_language.hpp>
-#include <godot_cpp/core/method_ptrcall.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 
 namespace gode {
 
 class Javascript : public godot::ScriptExtension {
-	GDCLASS(Javascript, godot::ScriptExtension)
+    GDCLASS(Javascript, godot::ScriptExtension)
 
-	bool is_dirty = false;
-	godot::String source_code;
-	
-	// Metadata cache
-	godot::StringName class_name;
-	godot::StringName base_class_name;
-	godot::TypedArray<godot::Dictionary> methods;
-	godot::TypedArray<godot::Dictionary> signals;
-	godot::TypedArray<godot::Dictionary> properties;
-	godot::HashMap<godot::StringName, godot::Variant> constants;
-	godot::HashMap<godot::StringName, int> member_lines;
+    bool is_dirty = false;
+    bool is_valid = false;
+    godot::String source_code;
 
-private:
-	bool compile();
-	void _update_metadata();
+    // Metadata cache
+    godot::StringName class_name;
+    godot::StringName base_class_name;
+    godot::HashMap<godot::StringName, godot::MethodInfo> methods;
+    godot::HashMap<godot::StringName, godot::MethodInfo> signals;
+    godot::HashMap<godot::StringName, godot::PropertyInfo> properties;
+    godot::HashMap<godot::StringName, godot::Variant> constants;
+    godot::HashMap<godot::StringName, int> member_lines;
+
+    // Napi objects
+    Napi::FunctionReference default_class;
+public:
+    bool compile();
+    // void _update_metadata(); // Merged into compile()
+    Napi::Function get_default_class() const;
 
 protected:
-	static void _bind_methods();
+    static void _bind_methods();
 
 public:
-	bool _editor_can_reload_from_file();
-	void _placeholder_erased(void *p_placeholder);
-	bool _can_instantiate() const;
-	godot::Ref<godot::Script> _get_base_script() const;
-	godot::StringName _get_global_name() const;
-	bool _inherits_script(const godot::Ref<godot::Script> &p_script) const;
-	godot::StringName _get_instance_base_type() const;
-	void *_instance_create(godot::Object *p_for_object) const;
-	void *_placeholder_instance_create(godot::Object *p_for_object) const;
-	bool _instance_has(godot::Object *p_object) const;
-	bool _has_source_code() const;
-	godot::String _get_source_code() const;
-	void _set_source_code(const godot::String &p_code);
-	godot::Error _reload(bool p_keep_state);
-	godot::StringName _get_doc_class_name() const;
-	godot::TypedArray<godot::Dictionary> _get_documentation() const;
-	godot::String _get_class_icon_path() const;
-	bool _has_method(const godot::StringName &p_method) const;
-	bool _has_static_method(const godot::StringName &p_method) const;
-	godot::Variant _get_script_method_argument_count(const godot::StringName &p_method) const;
-	godot::Dictionary _get_method_info(const godot::StringName &p_method) const;
-	bool _is_tool() const;
-	bool _is_valid() const;
-	bool _is_abstract() const;
-	godot::ScriptLanguage *_get_language() const;
-	bool _has_script_signal(const godot::StringName &p_signal) const;
-	godot::TypedArray<godot::Dictionary> _get_script_signal_list() const;
-	bool _has_property_default_value(const godot::StringName &p_property) const;
-	godot::Variant _get_property_default_value(const godot::StringName &p_property) const;
-	void _update_exports();
-	godot::TypedArray<godot::Dictionary> _get_script_method_list() const;
-	godot::TypedArray<godot::Dictionary> _get_script_property_list() const;
-	int32_t _get_member_line(const godot::StringName &p_member) const;
-	godot::Dictionary _get_constants() const;
-	godot::TypedArray<godot::StringName> _get_members() const;
-	bool _is_placeholder_fallback_enabled() const;
-	godot::Variant _get_rpc_config() const;
+    bool _editor_can_reload_from_file();
+    void _placeholder_erased(void *p_placeholder);
+    bool _can_instantiate() const;
+    godot::Ref<godot::Script> _get_base_script() const;
+    godot::StringName _get_global_name() const;
+    bool _inherits_script(const godot::Ref<godot::Script> &p_script) const;
+    godot::StringName _get_instance_base_type() const;
+    void *_instance_create(godot::Object *p_for_object) const;
+    void *_placeholder_instance_create(godot::Object *p_for_object) const;
+    bool _instance_has(godot::Object *p_object) const;
+    bool _has_source_code() const;
+    godot::String _get_source_code() const;
+    void _set_source_code(const godot::String &p_code);
+    godot::Error _reload(bool p_keep_state);
+    godot::StringName _get_doc_class_name() const;
+    godot::TypedArray<godot::Dictionary> _get_documentation() const;
+    godot::String _get_class_icon_path() const;
+    bool _has_method(const godot::StringName &p_method) const;
+    bool _has_static_method(const godot::StringName &p_method) const;
+    godot::Variant _get_script_method_argument_count(const godot::StringName &p_method) const;
+    godot::Dictionary _get_method_info(const godot::StringName &p_method) const;
+    bool _is_tool() const;
+    bool _is_valid() const;
+    bool _is_abstract() const;
+    godot::ScriptLanguage *_get_language() const;
+    bool _has_script_signal(const godot::StringName &p_signal) const;
+    godot::TypedArray<godot::Dictionary> _get_script_signal_list() const;
+    bool _has_property_default_value(const godot::StringName &p_property) const;
+    godot::Variant _get_property_default_value(const godot::StringName &p_property) const;
+    void _update_exports();
+    godot::TypedArray<godot::Dictionary> _get_script_method_list() const;
+    godot::TypedArray<godot::Dictionary> _get_script_property_list() const;
+    int32_t _get_member_line(const godot::StringName &p_member) const;
+    godot::Dictionary _get_constants() const;
+    godot::TypedArray<godot::StringName> _get_members() const;
+    bool _is_placeholder_fallback_enabled() const;
+    godot::Variant _get_rpc_config() const;
 };
 } //namespace gode
 

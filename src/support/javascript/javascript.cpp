@@ -2,8 +2,12 @@
 #include "support/javascript/javascript_instance.h"
 #include "support/javascript/javascript_instance_info.h"
 #include "support/javascript/javascript_language.h"
+#include "utils/node_runtime.h"
 #include <gdextension_interface.h>
 #include <tree_sitter/api.h>
+#include <v8-isolate.h>
+#include <v8-locker.h>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/gdextension_interface_loader.hpp>
 #include <godot_cpp/godot.hpp>
 
@@ -17,15 +21,31 @@ void Javascript::_bind_methods() {
 
 bool Javascript::compile() {
 	if (!is_dirty) {
+		return true;
+	}
+
+	// Compile JS code
+	String path = get_path();
+	if (path.is_empty()) {
 		return false;
 	}
 
-	_update_metadata();
-	is_dirty = false;
-	return true;
-}
+	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	Napi::HandleScope scope(JsEnvManager::get_env());
 
-void Javascript::_update_metadata() {
+	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), path.utf8().get_data());
+	Napi::Function cls = NodeRuntime::get_default_class(exports);
+
+	if (cls.IsEmpty() || cls.IsUndefined() || cls.IsNull()) {
+		// Clear cached class if compilation fails
+		default_class.Reset();
+		return false;
+	}
+
+	// Cache the default class
+	default_class = Napi::Persistent(cls);
+
 	// Initialize Tree-sitter
 	TSParser *parser = ts_parser_new();
 	ts_parser_set_language(parser, tree_sitter_javascript());
@@ -99,50 +119,28 @@ void Javascript::_update_metadata() {
 					String method_name_str = String::utf8(source.substr(start, end - start).c_str());
 					StringName method_name = StringName(method_name_str);
 
-					Dictionary method_info;
-					method_info["name"] = method_name;
-
-					// Determine if static
-					// In JS, 'static' is a modifier. We'd need to check children for 'static' keyword node
-					// Simplified: check text starts with static? No, that's unreliable.
-					// TS structure: modifiers are children before name?
-					// Let's assume instance method for now.
-
-					// Parameters
-					TSNode params_node = ts_node_child_by_field_name(member, "parameters", strlen("parameters"));
-					TypedArray<Dictionary> args;
-					uint32_t param_count = ts_node_child_count(params_node);
-					for (uint32_t k = 0; k < param_count; k++) {
-						TSNode param = ts_node_child(params_node, k);
-						// Skip parentheses and commas
-						if (strcmp(ts_node_type(param), "identifier") == 0) {
-							uint32_t p_start = ts_node_start_byte(param);
-							uint32_t p_end = ts_node_end_byte(param);
-							String param_name = String::utf8(source.substr(p_start, p_end - p_start).c_str());
-							Dictionary arg;
-							arg["name"] = param_name;
-							arg["type"] = Variant::NIL;
-							args.push_back(arg);
-						}
-					}
-					method_info["args"] = args;
-					method_info["default_args"] = Array();
-					method_info["return"] = Dictionary();
-					method_info["flags"] = METHOD_FLAG_NORMAL;
-
-					methods.push_back(method_info);
-
-					// Record line number (0-based in TS, Godot uses 1-based usually? Check ScriptEditor)
-					TSPoint start_point = ts_node_start_point(method_name_node);
-					member_lines[method_name] = start_point.row + 1;
+					MethodInfo mi;
+					mi.name = method_name;
+					methods[method_name] = mi;
+					member_lines[method_name] = ts_node_start_point(member).row + 1;
 				}
-				// TODO: Handle field_definition for properties
 			}
 		}
 	}
 
+	// Clean up Tree-sitter
 	ts_tree_delete(tree);
 	ts_parser_delete(parser);
+
+	is_dirty = false;
+	return true;
+}
+
+Napi::Function Javascript::get_default_class() const {
+	if (default_class.IsEmpty()) {
+		return Napi::Function();
+	}
+	return default_class.Value();
 }
 
 bool Javascript::_editor_can_reload_from_file() {

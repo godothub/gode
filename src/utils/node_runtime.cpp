@@ -2,6 +2,7 @@
 #include "register_builtin.gen.h"
 #include "register_classes.gen.h"
 #include "utility_functions/utility_functions.h"
+
 #include <cppgc/platform.h>
 #include <node.h>
 #include <node_api.h>
@@ -249,7 +250,6 @@ void NodeRuntime::init_once() {
 				"  return originalGlobalRequire.call(this, id);"
 				"};"
 				"if (originalGlobalRequire) Object.assign(globalThis.require, originalGlobalRequire);";
-		// "globalThis.require = require;";
 
 		node::LoadEnvironment(env, boot_script.c_str());
 
