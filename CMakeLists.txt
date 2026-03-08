@@ -216,16 +216,17 @@ if(NODE_LIBRARY)
 
     add_custom_command(TARGET gode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying libnode.dll from: ${NODE_DLL_TO_COPY}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${NODE_DLL_TO_COPY}"
-            "${CMAKE_SOURCE_DIR}/example/addons/gode/bin"
+            "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
     )
 endif()
 
 add_custom_command(TARGET gode POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
-        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin"
+        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:gode>
-        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/libgode.$<CONFIG>.dll"
+        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>/libgode.dll"
 )

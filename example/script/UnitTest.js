@@ -42,22 +42,22 @@ class UnitTest extends godot.Node {
 		
 		this.assert(v1.x === 1 && v1.y === 2, "Vector2 constructor sets x and y");
 		this.assert(Math.abs(v1.length() - 2.23606) < 0.0001, "Vector2.length() works");
-        
-        // Operator tests
-        let v3 = v1.add(v2);
-        this.assert(v3.x === 4.0 && v3.y === 6.0, "Vector2.add works");
-        
-        let v4 = v2.subtract(v1);
-        this.assert(v4.x === 2.0 && v4.y === 2.0, "Vector2.subtract works");
-        
-        let v5 = v1.multiply(2);
-        this.assert(v5.x === 2.0 && v5.y === 4.0, "Vector2.multiply (scalar) works");
-        
-        let v6 = v1.multiply(v2);
-        this.assert(v6.x === 3.0 && v6.y === 8.0, "Vector2.multiply (vector) works");
-        
-        this.assert(v1.equal(new Vector2(1, 2)), "Vector2.equal works");
-        this.assert(v1.not_equal(v2), "Vector2.not_equal works");
+		
+		// Operator tests
+		let v3 = v1.add(v2);
+		this.assert(v3.x === 4.0 && v3.y === 6.0, "Vector2.add works");
+		
+		let v4 = v2.subtract(v1);
+		this.assert(v4.x === 2.0 && v4.y === 2.0, "Vector2.subtract works");
+		
+		let v5 = v1.multiply(2);
+		this.assert(v5.x === 2.0 && v5.y === 4.0, "Vector2.multiply (scalar) works");
+		
+		let v6 = v1.multiply(v2);
+		this.assert(v6.x === 3.0 && v6.y === 8.0, "Vector2.multiply (vector) works");
+		
+		this.assert(v1.equal(new Vector2(1, 2)), "Vector2.equal works");
+		this.assert(v1.not_equal(v2), "Vector2.not_equal works");
 	}
 
 	test_node_creation() {
