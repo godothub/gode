@@ -104,11 +104,15 @@ bool Javascript::compile() const {
 						pi.type = Variant::VECTOR3;
 					} else if (type_str == "Vector3i") {
 						pi.type = Variant::VECTOR3I;
+					} else if (type_str == "Vector4") {
+						pi.type = Variant::VECTOR4;
+					} else if (type_str == "Vector4i") {
+						pi.type = Variant::VECTOR4I;
 					} else if (type_str == "Color") {
 						pi.type = Variant::COLOR;
 					} else if (type_str == "NodePath") {
 						pi.type = Variant::NODE_PATH;
-					} else if (type_str == "Object" || type_str == "Node") {
+					} else if (type_str == "Object") {
 						pi.type = Variant::OBJECT;
 					} else {
 						pi.type = Variant::NIL;
