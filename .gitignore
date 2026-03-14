@@ -4,6 +4,7 @@
 .cache
 .venv
 .clangd
+.claude
 
 # Ignore Visual Studio project files
 cmake-build-debug-visual-studio/
