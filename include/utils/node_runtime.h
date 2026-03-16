@@ -28,6 +28,11 @@ public:
 	static Napi::Function get_default_class(Napi::Value module_exports);
     static void spin_loop();
 	static void shutdown();
+
+private:
+	static bool is_esm_file(const std::string &filename, const std::string &code);
+	static Napi::Value compile_esm_module(const std::string &code, const std::string &filename);
+	static Napi::Value compile_cjs_module(const std::string &code, const std::string &filename);
 };
 
 } // namespace gode

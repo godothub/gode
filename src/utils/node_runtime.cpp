@@ -100,7 +100,9 @@ void NodeRuntime::init_once() {
 	std::vector<std::string> args;
 	std::vector<std::string> exec_args;
 	std::vector<std::string> errors;
+	// args[0] 是程序名，后面的是 node 标志
 	args.push_back("godot node");
+	args.push_back("--experimental-vm-modules");
 
 	int flags = node::ProcessInitializationFlags::kNoInitializeV8 |
 			node::ProcessInitializationFlags::kNoInitializeNodeV8Platform |
@@ -126,6 +128,8 @@ void NodeRuntime::init_once() {
 	platform = node::MultiIsolatePlatform::Create(4);
 
 	v8::V8::InitializePlatform(platform.get());
+	// 启用实验性 VM 模块支持
+	// v8::V8::SetFlagsFromString("--experimental-vm-modules");
 	v8::V8::Initialize();
 
 	cppgc::InitializeProcess(platform->GetPageAllocator());
@@ -373,6 +377,132 @@ void NodeRuntime::init_once() {
 
 		node::LoadEnvironment(env, boot_script.c_str());
 
+		// 事件循环跑一次，确保 boot_script 执行完毕
+		uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+
+		// ESM 支持代码单独执行，确保在 boot_script 之后注册
+		std::string esm_script =
+				"(function() {"
+				"const vm = require('vm');"
+				"const fs = require('fs');"
+				"const path = require('path');"
+				""
+				"global.__gode_esm_supported = (typeof vm.SourceTextModule !== 'undefined');"
+				""
+				"global.__gode_esm_cache = new Map();"
+				"global.__gode_esm_pending = new Map();"
+				""
+				"global.__gode_load_esm = async function(filepath, source) {"
+				"  if (!global.__gode_esm_supported) {"
+				"    throw new Error('vm.SourceTextModule is not available');"
+				"  }"
+				"  if (global.__gode_esm_cache.has(filepath)) {"
+				"    return global.__gode_esm_cache.get(filepath);"
+				"  }"
+				"  if (global.__gode_esm_pending.has(filepath)) {"
+				"    return global.__gode_esm_pending.get(filepath);"
+				"  }"
+				"  const loadPromise = (async () => {"
+				"    const module = new vm.SourceTextModule(source, {"
+				"      identifier: filepath,"
+				"      initializeImportMeta(meta) { meta.url = 'file://' + filepath; },"
+				"      importModuleDynamically: async (specifier, referrer) => {"
+				"        return await global.__gode_resolve_and_load(specifier, referrer.identifier);"
+				"      }"
+				"    });"
+				"    await module.link(async (specifier, referencingModule) => {"
+				"      return await global.__gode_resolve_and_load(specifier, referencingModule.identifier);"
+				"    });"
+				"    await module.evaluate();"
+				"    const ns = module.namespace;"
+				"    global.__gode_esm_cache.set(filepath, ns);"
+				"    global.__gode_esm_pending.delete(filepath);"
+				"    return ns;"
+				"  })();"
+				"  global.__gode_esm_pending.set(filepath, loadPromise);"
+				"  return loadPromise;"
+				"};"
+				""
+				"global.__gode_resolve_and_load = async function(specifier, referrerPath) {"
+				"  let resolvedPath;"
+				"  if (specifier.startsWith('./') || specifier.startsWith('../')) {"
+				"    const dir = path.dirname(referrerPath);"
+				"    resolvedPath = path.resolve(dir, specifier);"
+				"    if (!fs.existsSync(resolvedPath)) {"
+				"      for (const ext of ['.mjs', '.js', '.json']) {"
+				"        if (fs.existsSync(resolvedPath + ext)) { resolvedPath = resolvedPath + ext; break; }"
+				"      }"
+				"    }"
+				"  } else if (specifier.startsWith('res://')) {"
+				"    resolvedPath = specifier;"
+				"  } else {"
+				"    let builtinMod;"
+				"    try { builtinMod = require(specifier); } catch(e) {}"
+				"    if (builtinMod !== undefined) {"
+				"      const exportNames = Object.keys(builtinMod);"
+				"      const names = exportNames.includes('default') ? exportNames : ['default', ...exportNames];"
+				"      const syntheticModule = new vm.SyntheticModule(names,"
+				"        function() {"
+				"          this.setExport('default', builtinMod);"
+				"          for (const key of exportNames) {"
+				"            this.setExport(key, builtinMod[key]);"
+				"          }"
+				"        }, { identifier: specifier });"
+				"      await syntheticModule.link(() => {});"
+				"      await syntheticModule.evaluate();"
+				"      return syntheticModule;"
+				"    }"
+				"    try {"
+				"      resolvedPath = require.resolve(specifier, { paths: [path.dirname(referrerPath)] });"
+				"    } catch (e) {"
+				"      throw new Error(`Cannot find module '${specifier}' from '${referrerPath}'`);"
+				"    }"
+				"  }"
+				"  const source = fs.readFileSync(resolvedPath, 'utf8');"
+				"  const isESM = resolvedPath.endsWith('.mjs') ||"
+				"    (resolvedPath.endsWith('.js') && /^\\s*(import|export)\\s+/m.test(source));"
+				"  if (isESM) {"
+				"    return await global.__gode_load_esm(resolvedPath, source);"
+				"  } else {"
+				"    const cjsModule = require(resolvedPath);"
+				"    const exportNames = Object.keys(cjsModule);"
+				"    const syntheticModule = new vm.SyntheticModule("
+				"      exportNames.length > 0 ? exportNames : ['default'],"
+				"      function() {"
+				"        if (exportNames.length > 0) {"
+				"          for (const key of exportNames) { this.setExport(key, cjsModule[key]); }"
+				"        } else { this.setExport('default', cjsModule); }"
+				"      }, { identifier: resolvedPath });"
+				"    await syntheticModule.link(() => {});"
+				"    await syntheticModule.evaluate();"
+				"    return syntheticModule;"
+				"  }"
+				"};"
+				""
+				"global.__gode_compile_esm = async function(code, filename) {"
+				"  try {"
+				"    const ns = await global.__gode_load_esm(filename, code);"
+				"    return ns;"
+				"  } catch (e) {"
+				"    return e;"
+				"  }"
+				"};"
+				"})();";
+
+		// 执行 ESM 支持脚本
+		{
+			v8::Local<v8::String> esm_source = v8::String::NewFromUtf8(
+					isolate, esm_script.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+			v8::Local<v8::String> esm_name = v8::String::NewFromUtf8Literal(isolate, "<gode-esm-init>");
+			v8::ScriptOrigin esm_origin(esm_name);
+			v8::Local<v8::Script> esm_compiled;
+			if (v8::Script::Compile(context, esm_source, &esm_origin).ToLocal(&esm_compiled)) {
+				esm_compiled->Run(context);
+			} else {
+				// printf("[Gode ESM] Failed to compile ESM init script\n");
+			}
+		}
+
 		node_context.Reset(isolate, context);
 	}
 
@@ -410,9 +540,167 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 	if (!node_initialized) {
 		init_once();
 	}
+
+	// 检测是否为 ESM
+	if (is_esm_file(filename, code)) {
+		return compile_esm_module(code, filename);
+	} else {
+		return compile_cjs_module(code, filename);
+	}
+}
+
+bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &code) {
+	// 1. 检查文件扩展名（最高优先级）
+	if (filename.size() >= 4 && filename.substr(filename.size() - 4) == ".mjs") {
+		return true;
+	}
+	if (filename.size() >= 4 && filename.substr(filename.size() - 4) == ".cjs") {
+		return false;
+	}
+
+	// 2. 内容检测：如果有 CommonJS 特征，直接判定为 CJS
+	if (code.find("module.exports") != std::string::npos ||
+		code.find("exports.") != std::string::npos ||
+		code.find("require(") != std::string::npos) {
+		return false;
+	}
+
+	// 3. 内容检测：如果有 ESM 特征，判定为 ESM
+	if (code.find("import ") != std::string::npos ||
+		code.find("export ") != std::string::npos ||
+		code.find("import{") != std::string::npos ||
+		code.find("export{") != std::string::npos ||
+		code.find("export default") != std::string::npos) {
+		return true;
+	}
+
+	// 4. 对于 .js 文件，检查 package.json 的 "type" 字段
+	if (filename.size() >= 3 && filename.substr(filename.size() - 3) == ".js") {
+		std::string dir = filename;
+		size_t last_slash = dir.find_last_of("/\\");
+		if (last_slash != std::string::npos) {
+			dir = dir.substr(0, last_slash);
+		}
+
+		while (!dir.empty()) {
+			std::string pkg_path = dir + "/package.json";
+
+			godot::String gd_pkg_path = godot::String::utf8(pkg_path.c_str());
+			if (godot::FileAccess::file_exists(gd_pkg_path)) {
+				godot::Ref<godot::FileAccess> file = godot::FileAccess::open(gd_pkg_path, godot::FileAccess::READ);
+				if (file.is_valid()) {
+					godot::String content = file->get_as_text();
+					std::string json_str = content.utf8().get_data();
+
+					size_t type_pos = json_str.find("\"type\"");
+					if (type_pos != std::string::npos) {
+						size_t colon_pos = json_str.find(":", type_pos);
+						if (colon_pos != std::string::npos) {
+							size_t value_start = json_str.find_first_not_of(" \t\n\r", colon_pos + 1);
+							if (value_start != std::string::npos) {
+								if (json_str.substr(value_start, 8) == "\"module\"") {
+									return true;
+								} else if (json_str.substr(value_start, 12) == "\"commonjs\"") {
+									return false;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			size_t parent_slash = dir.find_last_of("/\\");
+			if (parent_slash != std::string::npos && parent_slash > 0) {
+				dir = dir.substr(0, parent_slash);
+			} else {
+				break;
+			}
+		}
+	}
+
+	// 5. 默认为 CommonJS
+	return false;
+}
+
+Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::string &filename) {
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
+	v8::EscapableHandleScope escapable_scope(isolate);
 
+	v8::Local<v8::String> fn_name = v8::String::NewFromUtf8Literal(isolate, "__gode_compile_esm");
+	v8::Local<v8::Value> fn_val;
+	if (!context->Global()->Get(context, fn_name).ToLocal(&fn_val) || !fn_val->IsFunction()) {
+		godot::UtilityFunctions::print("compile_esm_module: __gode_compile_esm not found");
+		return Napi::Value();
+	}
+
+	v8::Local<v8::Function> fn = fn_val.As<v8::Function>();
+
+	v8::Local<v8::Value> args[] = {
+		v8::String::NewFromUtf8(isolate, code.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+		v8::String::NewFromUtf8(isolate, filename.c_str(), v8::NewStringType::kNormal).ToLocalChecked()
+	};
+
+	v8::MaybeLocal<v8::Value> result = fn->Call(context, context->Global(), 2, args);
+
+	if (result.IsEmpty()) {
+		godot::UtilityFunctions::print("compile_esm_module: fn->Call returned empty");
+		return Napi::Value();
+	}
+
+	v8::Local<v8::Value> promise_val = result.ToLocalChecked();
+
+	// 检查是否是 Promise
+	if (!promise_val->IsPromise()) {
+		godot::UtilityFunctions::print("compile_esm_module: result is not a Promise");
+		return Napi::Value();
+	}
+
+	v8::Local<v8::Promise> promise = promise_val.As<v8::Promise>();
+
+	// 等待 Promise 完成（需要运行事件循环）
+	int max_iterations = 1000; // 降低最大迭代次数
+	int iterations = 0;
+
+	while (promise->State() == v8::Promise::kPending && iterations < max_iterations) {
+		// 使用 UV_RUN_NOWAIT 并添加微任务处理
+		isolate->PerformMicrotaskCheckpoint();
+		uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+		iterations++;
+
+		// 每 100 次迭代打印一次调试信息
+		if (iterations % 100 == 0) {
+			godot::UtilityFunctions::print("compile_esm_module: Still waiting... iteration ", iterations);
+		}
+	}
+
+	if (iterations >= max_iterations) {
+		godot::UtilityFunctions::print("compile_esm_module: Timeout waiting for Promise after ", iterations, " iterations");
+		return Napi::Value();
+	}
+
+	if (promise->State() == v8::Promise::kRejected) {
+		v8::Local<v8::Value> error = promise->Result();
+
+		// 尝试获取错误信息
+		v8::String::Utf8Value error_str(isolate, error);
+		godot::UtilityFunctions::print("compile_esm_module: Promise rejected: ", *error_str);
+		return Napi::Value();
+	}
+
+	v8::Local<v8::Value> final_exports = promise->Result();
+
+	if (final_exports->IsUndefined()) {
+		v8::Local<v8::Value> undefined_val = v8::Undefined(isolate);
+		return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(undefined_val)));
+	}
+
+	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(final_exports)));
+}
+
+Napi::Value NodeRuntime::compile_cjs_module(const std::string &code, const std::string &filename) {
+	v8::Local<v8::Context> context = node_context.Get(isolate);
+	v8::Context::Scope context_scope(context);
 	v8::EscapableHandleScope escapable_scope(isolate);
 
 	v8::Local<v8::String> fn_name = v8::String::NewFromUtf8Literal(isolate, "__gode_compile");
@@ -430,9 +718,8 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 
 	v8::MaybeLocal<v8::Value> result = fn->Call(context, context->Global(), 2, args);
 
-	// Check if Call succeeded
 	if (result.IsEmpty()) {
-		godot::UtilityFunctions::print("compile_script: fn->Call returned empty (exception?)");
+		godot::UtilityFunctions::print("compile_cjs_module: fn->Call returned empty (exception?)");
 		return Napi::Value();
 	}
 

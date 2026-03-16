@@ -1,15 +1,16 @@
 {
-  "name": "example",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
+	"name": "example",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "Gode example with ESM support",
+	"main": "index.js",
+	"scripts": {
 	"test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
+	},
+	"keywords": ["godot", "javascript", "esm"],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
 	"is-odd": "^3.0.1"
-  }
+	}
 }

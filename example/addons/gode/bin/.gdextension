@@ -7,3 +7,12 @@ compatibility_minimum = "4.6.1"
 
 windows.debug.x86_64 = "res://addons/gode/bin/Debug/libgode.dll"
 windows.release.x86_64 = "res://addons/gode/bin/Release/libgode.dll"
+
+[dependencies]
+
+windows.debug.x86_64 = {
+    "res://addons/gode/bin/Debug/libnode.dll": ""
+}
+windows.release.x86_64 = {
+    "res://addons/gode/bin/Release/libnode.dll": ""
+}
