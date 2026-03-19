@@ -1,13 +1,5 @@
 import godot from "godot";
-
-// ─── TypeScript type definitions ─────────────────────────────────────────────
-
-interface ExportEntry {
-	type: string;
-	default?: unknown;
-	hint?: number;
-	hint_string?: string;
-}
+import type { ExportEntry } from "@gode/ExportEntry";
 
 // ─── Inheritance test helpers ─────────────────────────────────────────────────
 

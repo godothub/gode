@@ -5,8 +5,8 @@
 	"description": "Gode example with ESM support",
 	"main": "index.js",
 	"scripts": {
-		"build": "tsc",
-		"watch": "tsc --watch",
+		"build": "tsc && tsc-alias",
+		"watch": "tsc --watch & tsc-alias --watch",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [
@@ -19,5 +19,8 @@
 	"dependencies": {
 		"is-odd": "^3.0.1",
 		"typescript": "^5.9.3"
+	},
+	"devDependencies": {
+		"tsc-alias": "^1.8.10"
 	}
 }
