@@ -8,9 +8,6 @@ namespace gode {
 class JavascriptLanguage : public godot::ScriptLanguageExtension {
 	GDCLASS(JavascriptLanguage, godot::ScriptLanguageExtension);
 
-private:
-	JavascriptLanguage() = default;
-
 public:
 	~JavascriptLanguage();
 	static JavascriptLanguage *get_singleton();

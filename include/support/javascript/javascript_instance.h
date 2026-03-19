@@ -1,10 +1,11 @@
 #ifndef GODOT_JAVASCRIPT_INSTANCE_H
 #define GODOT_JAVASCRIPT_INSTANCE_H
 
-#include "support/javascript/javascript.h"
+#include "script_module.h"
 #include <napi.h>
 #include <vector>
 #include <godot_cpp/classes/ref.hpp>
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 
 namespace gode {
@@ -12,7 +13,8 @@ namespace gode {
 class Javascript;
 
 class JavascriptInstance {
-	godot::Ref<Javascript> javascript;
+	IScriptModule *module = nullptr;
+	godot::Ref<godot::Script> script;
 	godot::Object *owner = nullptr;
 	Napi::ObjectReference js_instance;
 	bool placeholder = false;
@@ -28,7 +30,7 @@ private:
 	bool compile_module();
 
 public:
-	JavascriptInstance(const godot::Ref<Javascript> &p_javascript, godot::Object *p_owner, bool p_placeholder);
+	JavascriptInstance(IScriptModule *p_module, godot::Ref<godot::Script> p_script, godot::Object *p_owner, bool p_placeholder);
 	~JavascriptInstance();
 
 	godot::Object *get_owner() const;
@@ -51,7 +53,8 @@ public:
 	void get_method_list(const GDExtensionMethodInfo *&r_list, uint32_t &r_count) const;
 	void free_method_list(const GDExtensionMethodInfo *p_list) const;
 
-	godot::Ref<Javascript> get_script() const;
+	godot::Ref<godot::Script> get_script() const;
+	IScriptModule *get_module() const;
 };
 } // namespace gode
 

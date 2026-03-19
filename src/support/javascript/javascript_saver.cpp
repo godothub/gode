@@ -69,7 +69,10 @@ Error JavascriptSaver::_set_uid(const String &p_path, int64_t p_uid) {
 }
 
 bool JavascriptSaver::_recognize(const Ref<Resource> &p_resource) const {
-	return true;
+	if (!p_resource.is_valid()) return false;
+	String path = p_resource->get_path();
+	String ext = path.get_extension().to_lower();
+	return ext == "js";
 }
 
 PackedStringArray JavascriptSaver::_get_recognized_extensions(const Ref<Resource> &p_resource) const {

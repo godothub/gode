@@ -2,6 +2,7 @@
 #include "godot_cpp/core/memory.hpp"
 #include "support/javascript/javascript_instance.h"
 #include "support/javascript/javascript_language.h"
+#include <godot_cpp/classes/script_language.hpp>
 
 using namespace godot;
 
@@ -226,7 +227,7 @@ static GDExtensionObjectPtr javascript_instance_get_script(GDExtensionScriptInst
 	if (!instance) {
 		return nullptr;
 	}
-	Ref<Javascript> script = instance->get_script();
+	Ref<Script> script = instance->get_script();
 	if (!script.is_valid()) {
 		return nullptr;
 	}
@@ -250,6 +251,11 @@ static GDExtensionBool javascript_instance_get_fallback(GDExtensionScriptInstanc
 }
 
 static GDExtensionScriptLanguagePtr javascript_instance_get_language(GDExtensionScriptInstanceDataPtr p_instance) {
+	JavascriptInstance *instance = cast_instance(p_instance);
+	if (instance && instance->get_module()) {
+		ScriptLanguage *lang = instance->get_module()->get_script_language();
+		if (lang) return lang->_owner;
+	}
 	return JavascriptLanguage::get_singleton()->_owner;
 }
 

@@ -4,6 +4,10 @@
 #include "support/javascript/javascript_language.h"
 #include "support/javascript/javascript_loader.h"
 #include "support/javascript/javascript_saver.h"
+#include "support/typescript/typescript.h"
+#include "support/typescript/typescript_language.h"
+#include "support/typescript/typescript_loader.h"
+#include "support/typescript/typescript_saver.h"
 #include "tests/test_runner.h"
 #include "utils/gode_event_loop.h"
 #include "utils/node_runtime.h"
@@ -24,10 +28,17 @@ void initialize_node_module(godot::ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(gode::JavascriptLanguage);
 	GDREGISTER_CLASS(gode::JavascriptSaver);
 	GDREGISTER_CLASS(gode::JavascriptLoader);
+	GDREGISTER_CLASS(gode::Typescript);
+	GDREGISTER_CLASS(gode::TypescriptLanguage);
+	GDREGISTER_CLASS(gode::TypescriptSaver);
+	GDREGISTER_CLASS(gode::TypescriptLoader);
 	GDREGISTER_CLASS(gode::GodeEventLoop);
 	godot::Engine::get_singleton()->register_script_language(gode::JavascriptLanguage::get_singleton());
+	godot::Engine::get_singleton()->register_script_language(gode::TypescriptLanguage::get_singleton());
 	godot::ResourceSaver::get_singleton()->add_resource_format_saver(gode::JavascriptSaver::get_singleton());
+	godot::ResourceSaver::get_singleton()->add_resource_format_saver(gode::TypescriptSaver::get_singleton());
 	godot::ResourceLoader::get_singleton()->add_resource_format_loader(gode::JavascriptLoader::get_singleton());
+	godot::ResourceLoader::get_singleton()->add_resource_format_loader(gode::TypescriptLoader::get_singleton());
 
 	gode::NodeRuntime::init_once();
 
@@ -40,8 +51,11 @@ void uninitialize_node_module(godot::ModuleInitializationLevel p_level) {
 		return;
 	}
 	godot::Engine::get_singleton()->unregister_script_language(gode::JavascriptLanguage::get_singleton());
+	godot::Engine::get_singleton()->unregister_script_language(gode::TypescriptLanguage::get_singleton());
 	godot::ResourceSaver::get_singleton()->remove_resource_format_saver(gode::JavascriptSaver::get_singleton());
+	godot::ResourceSaver::get_singleton()->remove_resource_format_saver(gode::TypescriptSaver::get_singleton());
 	godot::ResourceLoader::get_singleton()->remove_resource_format_loader(gode::JavascriptLoader::get_singleton());
+	godot::ResourceLoader::get_singleton()->remove_resource_format_loader(gode::TypescriptLoader::get_singleton());
 
 	// 注销并删除事件循环单例
 	if (event_loop_singleton) {

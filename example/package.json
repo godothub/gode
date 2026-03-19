@@ -5,12 +5,19 @@
 	"description": "Gode example with ESM support",
 	"main": "index.js",
 	"scripts": {
-	"test": "echo \"Error: no test specified\" && exit 1"
+		"build": "tsc",
+		"watch": "tsc --watch",
+		"test": "echo \"Error: no test specified\" && exit 1"
 	},
-	"keywords": ["godot", "javascript", "esm"],
+	"keywords": [
+		"godot",
+		"javascript",
+		"esm"
+	],
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
-	"is-odd": "^3.0.1"
+		"is-odd": "^3.0.1",
+		"typescript": "^5.9.3"
 	}
 }

@@ -39,7 +39,8 @@ PackedStringArray JavascriptLoader::_get_recognized_extensions() const {
 }
 
 bool JavascriptLoader::_recognize_path(const String &p_path, const StringName &p_type) const {
-	return p_path.get_extension().to_lower() == String("js");
+	String ext = p_path.get_extension().to_lower();
+	return ext == String("js");
 }
 
 bool JavascriptLoader::_handles_type(const StringName &p_type) const {

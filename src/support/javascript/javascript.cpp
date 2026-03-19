@@ -398,16 +398,18 @@ StringName Javascript::_get_instance_base_type() const {
 }
 
 void *Javascript::_instance_create(Object *p_for_object) const {
-	const Ref self(const_cast<Javascript *>(this));
-	JavascriptInstance *instance = memnew(JavascriptInstance(self, p_for_object, false));
+	Ref<Script> self(const_cast<Javascript *>(this));
+	IScriptModule *module = const_cast<Javascript *>(this);
+	JavascriptInstance *instance = memnew(JavascriptInstance(module, self, p_for_object, false));
 	instances.insert(instance);
 	instance_objects.insert(p_for_object);
 	return gdextension_interface::script_instance_create3(&javascript_instance_info, instance);
 }
 
 void *Javascript::_placeholder_instance_create(Object *p_for_object) const {
-	const Ref self(const_cast<Javascript *>(this));
-	JavascriptInstance *instance = memnew(JavascriptInstance(self, p_for_object, true));
+	Ref<Script> self(const_cast<Javascript *>(this));
+	IScriptModule *module = const_cast<Javascript *>(this);
+	JavascriptInstance *instance = memnew(JavascriptInstance(module, self, p_for_object, true));
 	placeholder_instances.insert(instance);
 	return gdextension_interface::script_instance_create3(&javascript_instance_info, instance);
 }
@@ -479,6 +481,14 @@ bool Javascript::_is_abstract() const {
 
 ScriptLanguage *Javascript::_get_language() const {
 	return JavascriptLanguage::get_singleton();
+}
+
+ScriptLanguage *Javascript::get_script_language() const {
+	return JavascriptLanguage::get_singleton();
+}
+
+StringName Javascript::get_global_name() const {
+	return class_name;
 }
 
 bool Javascript::_has_script_signal(const StringName &p_signal) const {

@@ -11,16 +11,17 @@ using namespace godot;
 
 namespace gode {
 
-JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Object *p_owner, bool p_placeholder) :
-		javascript(p_javascript),
+JavascriptInstance::JavascriptInstance(IScriptModule *p_module, Ref<Script> p_script, Object *p_owner, bool p_placeholder) :
+		module(p_module),
+		script(p_script),
 		owner(p_owner),
 		placeholder(p_placeholder) {
 	if (!placeholder) {
-		if (!javascript.is_valid()) {
+		if (!module) {
 			return;
 		}
 
-		if (!javascript->compile()) {
+		if (!module->compile()) {
 			return;
 		}
 
@@ -28,7 +29,7 @@ JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Obje
 		v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 		Napi::HandleScope scope(JsEnvManager::get_env());
 
-		Napi::Function default_class = javascript->get_default_class();
+		Napi::Function default_class = module->get_default_class();
 		if (default_class.IsEmpty() || default_class.IsUndefined() || default_class.IsNull()) {
 			return;
 		}
@@ -55,10 +56,6 @@ bool JavascriptInstance::is_placeholder() const {
 
 bool JavascriptInstance::set(const StringName &p_name, const Variant &p_value) {
 	if (placeholder) {
-		if (javascript->_has_property_default_value(p_name)) {
-			placeholder_properties[p_name] = p_value;
-			return true;
-		}
 		placeholder_properties[p_name] = p_value;
 		return true;
 	}
@@ -75,8 +72,8 @@ bool JavascriptInstance::get(const StringName &p_name, Variant &r_value) const {
 			r_value = placeholder_properties[p_name];
 			return true;
 		}
-		if (javascript->_has_property_default_value(p_name)) {
-			r_value = javascript->_get_property_default_value(p_name);
+		if (module && module->_has_property_default_value(p_name)) {
+			r_value = module->_get_property_default_value(p_name);
 			return true;
 		}
 		return false;
@@ -87,7 +84,6 @@ bool JavascriptInstance::get(const StringName &p_name, Variant &r_value) const {
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	Napi::Object obj = js_instance.Value();
 	const char *prop_name = String(p_name).utf8().get_data();
-	// HasOwnProperty: only check the JS instance itself, skip C++ prototype chain
 	if (obj.HasOwnProperty(prop_name)) {
 		Napi::Value val = js_instance.Get(prop_name);
 		r_value = napi_to_godot(val);
@@ -98,7 +94,7 @@ bool JavascriptInstance::get(const StringName &p_name, Variant &r_value) const {
 
 bool JavascriptInstance::has_method(const StringName &p_method) const {
 	if (placeholder) {
-		return javascript->_has_method(p_method);
+		return module ? module->_has_method(p_method) : false;
 	}
 	if (js_instance.IsEmpty()) {
 		return false;
@@ -106,8 +102,7 @@ bool JavascriptInstance::has_method(const StringName &p_method) const {
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::HandleScope scope(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	// Check the JS class prototype for own methods only, ignoring C++ bound class methods
-	Napi::Function cls = javascript->get_default_class();
+	Napi::Function cls = module ? module->get_default_class() : Napi::Function();
 	if (cls.IsEmpty() || !cls.IsFunction()) {
 		return false;
 	}
@@ -133,7 +128,7 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 		return Variant();
 	}
 
-	if (!javascript->is_tool() && Engine::get_singleton()->is_editor_hint()) {
+	if (Engine::get_singleton()->is_editor_hint()) {
 		r_error.error = GDExtensionCallErrorType::GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 		return Variant();
 	}
@@ -185,7 +180,6 @@ String JavascriptInstance::to_string(bool &r_is_valid) const {
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	Napi::HandleScope scope(JsEnvManager::get_env());
 	Napi::Object obj = js_instance.Value();
-	// Call JS toString() only if the class defines its own (not the inherited Object.prototype.toString)
 	Napi::Value proto_val = obj.Get("__proto__");
 	if (proto_val.IsObject()) {
 		Napi::Object proto = proto_val.As<Napi::Object>();
@@ -200,9 +194,8 @@ String JavascriptInstance::to_string(bool &r_is_valid) const {
 			}
 		}
 	}
-	// Fallback: "<ClassName>:<instance_id>"
 	r_is_valid = true;
-	String cls_name = String(javascript->_get_global_name());
+	String cls_name = module ? String(module->get_global_name()) : String();
 	if (cls_name.is_empty()) {
 		cls_name = "JavascriptInstance";
 	}
@@ -224,8 +217,8 @@ void JavascriptInstance::get_property_list(const GDExtensionPropertyInfo *&r_lis
 	prop_list_cache.clear();
 	prop_list_gde.clear();
 
-	if (javascript.is_valid()) {
-		const godot::HashMap<godot::StringName, godot::PropertyInfo> &props = javascript->get_exported_properties();
+	if (module) {
+		const godot::HashMap<godot::StringName, godot::PropertyInfo> &props = module->get_exported_properties();
 		prop_list_cache.reserve(props.size());
 		for (const godot::KeyValue<godot::StringName, godot::PropertyInfo> &kv : props) {
 			prop_list_cache.push_back(kv.value);
@@ -249,23 +242,24 @@ void JavascriptInstance::get_property_list(const GDExtensionPropertyInfo *&r_lis
 }
 
 void JavascriptInstance::free_property_list(const GDExtensionPropertyInfo *p_list) const {
-	// prop_list_cache and prop_list_gde are member vectors — nothing to free here
 	(void)p_list;
 }
 
 void JavascriptInstance::get_method_list(const GDExtensionMethodInfo *&r_list, uint32_t &r_count) const {
-	// TODO: Implement method list retrieval from script metadata
 	(void)r_list;
 	r_count = 0;
 }
 
 void JavascriptInstance::free_method_list(const GDExtensionMethodInfo *p_list) const {
-	if (p_list) {
-		// memdelete_arr(p_list);
-	}
+	(void)p_list;
 }
 
-Ref<Javascript> JavascriptInstance::get_script() const {
-	return javascript;
+Ref<Script> JavascriptInstance::get_script() const {
+	return script;
 }
+
+IScriptModule *JavascriptInstance::get_module() const {
+	return module;
+}
+
 } //namespace gode

@@ -1,8 +1,8 @@
-#ifndef GODOT_GODE_JAVASCRIPT_H
-#define GODOT_GODE_JAVASCRIPT_H
+#ifndef GODOT_GODE_TYPESCRIPT_H
+#define GODOT_GODE_TYPESCRIPT_H
 
-#include "javascript_instance.h"
-#include "script_module.h"
+#include "support/javascript/javascript_instance.h"
+#include "support/javascript/script_module.h"
 
 #include <napi.h>
 #include <godot_cpp/classes/script_extension.hpp>
@@ -14,10 +14,9 @@ namespace gode {
 
 class JavascriptInstance;
 
-class Javascript : public godot::ScriptExtension, public IScriptModule {
-	GDCLASS(Javascript, godot::ScriptExtension)
+class Typescript : public godot::ScriptExtension, public IScriptModule {
+	GDCLASS(Typescript, godot::ScriptExtension)
 
-protected:
 	mutable bool is_dirty = false;
 	mutable bool is_valid = false;
 	godot::String source_code;
@@ -38,8 +37,10 @@ protected:
 	mutable godot::HashSet<JavascriptInstance *> instances;
 	mutable godot::HashSet<JavascriptInstance *> placeholder_instances;
 	mutable godot::HashSet<godot::Object *> instance_objects;
+
 public:
-	virtual bool compile() const override;
+	// IScriptModule
+	bool compile() const override;
 	Napi::Function get_default_class() const override;
 	const godot::HashMap<godot::StringName, godot::PropertyInfo> &get_exported_properties() const override { return properties; }
 	const godot::HashMap<godot::StringName, godot::Variant> &get_property_defaults() const override { return property_defaults; }
@@ -50,7 +51,7 @@ public:
 	godot::StringName get_global_name() const override;
 
 protected:
-	static void _bind_methods();
+	static void _bind_methods() {}
 
 public:
 	bool _editor_can_reload_from_file();
@@ -88,6 +89,7 @@ public:
 	bool _is_placeholder_fallback_enabled() const;
 	godot::Variant _get_rpc_config() const;
 };
-} //namespace gode
 
-#endif // GODE_JAVASCRIPT_H
+} // namespace gode
+
+#endif // GODOT_GODE_TYPESCRIPT_H

@@ -119,6 +119,24 @@ add_library(tree-sitter-javascript STATIC
 )
 target_include_directories(tree-sitter-javascript PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-javascript/src")
 
+# Add tree-sitter-typescript
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/typescript/src/parser.c")
+    message(STATUS "Initializing tree-sitter-typescript submodule...")
+    execute_process(COMMAND git submodule update --init --recursive tree-sitter-typescript WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+
+add_library(tree-sitter-typescript STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/typescript/src/parser.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/typescript/src/scanner.c"
+)
+target_include_directories(tree-sitter-typescript PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/typescript/src")
+
+add_library(tree-sitter-tsx STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/tsx/src/parser.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/tsx/src/scanner.c"
+)
+target_include_directories(tree-sitter-tsx PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tree-sitter-typescript/tsx/src")
+
 # -----------------------------------------------------------------------------
 # Target: gode
 # -----------------------------------------------------------------------------
@@ -174,6 +192,8 @@ target_link_libraries(gode
     godot::cpp
     tree-sitter
     tree-sitter-javascript
+    tree-sitter-typescript
+    tree-sitter-tsx
 )
 
 if(MINGW)
