@@ -13,6 +13,7 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/json.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -268,7 +269,7 @@ void NodeRuntime::init_once() {
 				"            paths.push(p + (p.endsWith('/') ? '' : '/') + 'node_modules');"
 				"            const parent = path.dirname(p);"
 				"            if (parent === p) break;"
-				"            if (p === 'res://') break;" 
+				"            if (p === 'res://') break;"
 				"            p = parent;"
 				"        }"
 				"        return paths;"
@@ -331,49 +332,49 @@ void NodeRuntime::init_once() {
 				"  return originalGlobalRequire.call(this, id);"
 				"};"
 				"if (originalGlobalRequire) Object.assign(globalThis.require, originalGlobalRequire);"
-                ""
-                "if (gode.GDObject && gode.GDObject.prototype) {"
-                "  gode.GDObject.prototype.toSignal = function(signal, { timeoutMs, abortSignal } = {}) {"
-                "    const obj = this;"
-                "    return new Promise((resolve, reject) => {"
-                "      let done = false;"
-                "      let timer = null;"
-                "      const cleanup = () => {"
-                "        if (timer) clearTimeout(timer);"
-                "        if (abortSignal) abortSignal.removeEventListener('abort', onAbort);"
-                "        try { obj.disconnect(signal, callback); } catch (_) {}"
-                "      };"
-                "      const callback = (...args) => {"
-                "        if (done) return;"
-                "        done = true;"
-                "        cleanup();"
-                "        resolve(args.length <= 1 ? args[0] : args);"
-                "      };"
-                "      const onAbort = () => {"
-                "        if (done) return;"
-                "        done = true;"
-                "        cleanup();"
-                "        reject(new Error('toSignal: aborted'));"
-                "      };"
-                "      try {"
-                "        obj.connect(signal, callback);"
-                "      } catch (e) {"
-                "        cleanup();"
-                "        return reject(e);"
-                "      }"
-                "      if (abortSignal) abortSignal.addEventListener('abort', onAbort, { once: true });"
-                "      if (typeof timeoutMs === 'number' && timeoutMs > 0) {"
-                "        timer = setTimeout(() => {"
-                "          if (done) return;"
-                "          done = true;"
-                "          cleanup();"
-                "          reject(new Error(`toSignal: timeout waiting for '${signal}'`));"
-                "        }, timeoutMs);"
-                "      }"
-                "    });"
-                "  };"
-                "  gode.GDObject.prototype.to_signal = gode.GDObject.prototype.toSignal;"
-                "}";
+				""
+				"if (gode.GDObject && gode.GDObject.prototype) {"
+				"  gode.GDObject.prototype.toSignal = function(signal, { timeoutMs, abortSignal } = {}) {"
+				"    const obj = this;"
+				"    return new Promise((resolve, reject) => {"
+				"      let done = false;"
+				"      let timer = null;"
+				"      const cleanup = () => {"
+				"        if (timer) clearTimeout(timer);"
+				"        if (abortSignal) abortSignal.removeEventListener('abort', onAbort);"
+				"        try { obj.disconnect(signal, callback); } catch (_) {}"
+				"      };"
+				"      const callback = (...args) => {"
+				"        if (done) return;"
+				"        done = true;"
+				"        cleanup();"
+				"        resolve(args.length <= 1 ? args[0] : args);"
+				"      };"
+				"      const onAbort = () => {"
+				"        if (done) return;"
+				"        done = true;"
+				"        cleanup();"
+				"        reject(new Error('toSignal: aborted'));"
+				"      };"
+				"      try {"
+				"        obj.connect(signal, callback);"
+				"      } catch (e) {"
+				"        cleanup();"
+				"        return reject(e);"
+				"      }"
+				"      if (abortSignal) abortSignal.addEventListener('abort', onAbort, { once: true });"
+				"      if (typeof timeoutMs === 'number' && timeoutMs > 0) {"
+				"        timer = setTimeout(() => {"
+				"          if (done) return;"
+				"          done = true;"
+				"          cleanup();"
+				"          reject(new Error(`toSignal: timeout waiting for '${signal}'`));"
+				"        }, timeoutMs);"
+				"      }"
+				"    });"
+				"  };"
+				"  gode.GDObject.prototype.to_signal = gode.GDObject.prototype.toSignal;"
+				"}";
 
 		node::LoadEnvironment(env, boot_script.c_str());
 
@@ -405,7 +406,7 @@ void NodeRuntime::init_once() {
 				"  const loadPromise = (async () => {"
 				"    const module = new vm.SourceTextModule(source, {"
 				"      identifier: filepath,"
-				"      initializeImportMeta(meta) { meta.url = 'file://' + filepath; },"
+				"      initializeImportMeta(meta) { meta.url = filepath; },"
 				"      importModuleDynamically: async (specifier, referrer) => {"
 				"        return await global.__gode_resolve_and_load(specifier, referrer.identifier);"
 				"      }"
@@ -492,7 +493,8 @@ void NodeRuntime::init_once() {
 		// 执行 ESM 支持脚本
 		{
 			v8::Local<v8::String> esm_source = v8::String::NewFromUtf8(
-					isolate, esm_script.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+					isolate, esm_script.c_str(), v8::NewStringType::kNormal)
+													   .ToLocalChecked();
 			v8::Local<v8::String> esm_name = v8::String::NewFromUtf8Literal(isolate, "<gode-esm-init>");
 			v8::ScriptOrigin esm_origin(esm_name);
 			v8::Local<v8::Script> esm_compiled;
@@ -560,17 +562,17 @@ bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &co
 
 	// 2. 内容检测：如果有 CommonJS 特征，直接判定为 CJS
 	if (code.find("module.exports") != std::string::npos ||
-		code.find("exports.") != std::string::npos ||
-		code.find("require(") != std::string::npos) {
+			code.find("exports.") != std::string::npos ||
+			code.find("require(") != std::string::npos) {
 		return false;
 	}
 
 	// 3. 内容检测：如果有 ESM 特征，判定为 ESM
 	if (code.find("import ") != std::string::npos ||
-		code.find("export ") != std::string::npos ||
-		code.find("import{") != std::string::npos ||
-		code.find("export{") != std::string::npos ||
-		code.find("export default") != std::string::npos) {
+			code.find("export ") != std::string::npos ||
+			code.find("import{") != std::string::npos ||
+			code.find("export{") != std::string::npos ||
+			code.find("export default") != std::string::npos) {
 		return true;
 	}
 
@@ -590,30 +592,13 @@ bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &co
 				godot::Ref<godot::FileAccess> file = godot::FileAccess::open(gd_pkg_path, godot::FileAccess::READ);
 				if (file.is_valid()) {
 					godot::String content = file->get_as_text();
-					std::string json_str = content.utf8().get_data();
-
-					size_t type_pos = json_str.find("\"type\"");
-					if (type_pos != std::string::npos) {
-						size_t colon_pos = json_str.find(":", type_pos);
-						if (colon_pos != std::string::npos) {
-							size_t value_start = json_str.find_first_not_of(" \t\n\r", colon_pos + 1);
-							if (value_start != std::string::npos) {
-								if (json_str.substr(value_start, 8) == "\"module\"") {
-									return true;
-								} else if (json_str.substr(value_start, 12) == "\"commonjs\"") {
-									return false;
-								}
-							}
-						}
+					godot::Dictionary json = static_cast<godot::Dictionary>(godot::JSON::parse_string(content));
+					if (json["type"] == "module") {
+						return true;
+					} else if (json["type"] == "commonjs") {
+						return false;
 					}
 				}
-			}
-
-			size_t parent_slash = dir.find_last_of("/\\");
-			if (parent_slash != std::string::npos && parent_slash > 0) {
-				dir = dir.substr(0, parent_slash);
-			} else {
-				break;
 			}
 		}
 	}
@@ -658,26 +643,9 @@ Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::
 
 	v8::Local<v8::Promise> promise = promise_val.As<v8::Promise>();
 
-	// 等待 Promise 完成（需要运行事件循环）
-	int max_iterations = 1000; // 降低最大迭代次数
-	int iterations = 0;
-
-	while (promise->State() == v8::Promise::kPending && iterations < max_iterations) {
-		// 使用 UV_RUN_NOWAIT 并添加微任务处理
-		isolate->PerformMicrotaskCheckpoint();
-		uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-		iterations++;
-
-		// 每 100 次迭代打印一次调试信息
-		if (iterations % 100 == 0) {
-			godot::UtilityFunctions::print("compile_esm_module: Still waiting... iteration ", iterations);
-		}
-	}
-
-	if (iterations >= max_iterations) {
-		godot::UtilityFunctions::print("compile_esm_module: Timeout waiting for Promise after ", iterations, " iterations");
-		return Napi::Value();
-	}
+	// Promise 的 resolve/reject 是通过微任务（microtask）触发的。
+	isolate->PerformMicrotaskCheckpoint();
+	uv_run(uv_default_loop(), UV_RUN_ONCE);
 
 	if (promise->State() == v8::Promise::kRejected) {
 		v8::Local<v8::Value> error = promise->Result();
