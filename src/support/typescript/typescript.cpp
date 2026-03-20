@@ -69,6 +69,7 @@ bool Typescript::compile() const {
 	property_defaults.clear();
 	constants.clear();
 	member_lines.clear();
+	is_tool_script = false;
 
 	// Read static exports
 	if (cls.Has("exports")) {
@@ -116,6 +117,12 @@ bool Typescript::compile() const {
 				}
 			}
 		}
+	}
+
+	// Read static tool — equivalent to @tool in GDScript
+	// TS usage: static tool = true
+	if (cls.Has("tool") && cls.Get("tool").IsBoolean()) {
+		is_tool_script = cls.Get("tool").As<Napi::Boolean>().Value();
 	}
 
 	// 解析 AST：export_statement > export default class / class_declaration

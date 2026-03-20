@@ -19,6 +19,7 @@ class Javascript : public godot::ScriptExtension {
 protected:
 	mutable bool is_dirty = false;
 	mutable bool is_valid = false;
+	mutable bool is_tool_script = false;
 	godot::String source_code;
 
 	mutable godot::StringName class_name;

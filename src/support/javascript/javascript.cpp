@@ -64,6 +64,7 @@ bool Javascript::compile() const {
 	property_defaults.clear();
 	constants.clear();
 	member_lines.clear();
+	is_tool_script = false;
 
 	// Read static exports — equivalent to @export in GDScript
 	// JS usage: static exports = { speed: { type: "float", default: 100.0 } }
@@ -138,6 +139,12 @@ bool Javascript::compile() const {
 				}
 			}
 		}
+	}
+
+	// Read static tool — equivalent to @tool in GDScript
+	// JS usage: static tool = true
+	if (cls.Has("tool") && cls.Get("tool").IsBoolean()) {
+		is_tool_script = cls.Get("tool").As<Napi::Boolean>().Value();
 	}
 
 	// Basic query to find class declaration and methods
@@ -466,7 +473,7 @@ Dictionary Javascript::_get_method_info(const StringName &p_method) const {
 }
 
 bool Javascript::_is_tool() const {
-	return false;
+	return is_tool_script;
 }
 
 bool Javascript::_is_valid() const {
