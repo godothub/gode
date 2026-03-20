@@ -27,4 +27,4 @@ include/generated
 src/generated
 
 # Ignore Python cache files
-code_generator/*/__pycache__/
+code_generator/*/__pycache__

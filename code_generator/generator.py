@@ -40,8 +40,7 @@ def main():
     print(f"Using src directory: {SRC_DIR}")
 
     # Discover generators in builtin, class, utility, register packages
-    # packages = ['builtin', 'class', 'register']
-    packages = ['builtin']
+    packages = ['builtin', 'class', 'register']
     all_generators = []
 
     # Ensure current directory is in sys.path
