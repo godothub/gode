@@ -190,9 +190,11 @@ static void javascript_instance_call(GDExtensionScriptInstanceDataPtr p_self, GD
 }
 
 static void javascript_instance_notification(GDExtensionScriptInstanceDataPtr p_instance, int32_t p_what, GDExtensionBool p_reversed) {
-	(void)p_instance;
-	(void)p_what;
-	(void)p_reversed;
+	// JavascriptInstance *instance = cast_instance(p_instance);
+	// if (!instance) {
+	// 	return;
+	// }
+	// instance->notification(p_what, p_reversed);
 }
 
 static void javascript_instance_to_string(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionBool *r_is_valid, GDExtensionStringPtr r_out) {

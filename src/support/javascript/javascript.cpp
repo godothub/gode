@@ -33,7 +33,7 @@ bool Javascript::compile() const {
 
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	Napi::HandleScope scope(JsEnvManager::get_env());
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
 
 	Napi::Value exports = NodeRuntime::compile_script(source_code.utf8().get_data(), path.utf8().get_data());
 	Napi::Function cls = NodeRuntime::get_default_class(exports);

@@ -29,7 +29,7 @@ Napi::Function JavascriptCallable::get_function() const {
 uint32_t JavascriptCallable::hash() const {
     v8::Locker locker(NodeRuntime::isolate);
     v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-    Napi::HandleScope scope(JsEnvManager::get_env());
+    v8::HandleScope handle_scope(NodeRuntime::isolate);
 
     if (func_ref.IsEmpty()) return 0;
     
@@ -59,21 +59,22 @@ godot::ObjectID JavascriptCallable::get_object() const {
 void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount, godot::Variant &r_return_value, GDExtensionCallError &r_call_error) const {
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	Napi::HandleScope scope(JsEnvManager::get_env());
-
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
+    
 	if (func_ref.IsEmpty()) {
 		r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 		return;
 	}
 
 	Napi::Function func = func_ref.Value();
+	Napi::Env env = func.Env();
 	std::vector<napi_value> args;
 	for (int i = 0; i < p_argcount; ++i) {
-		args.push_back(godot_to_napi(JsEnvManager::get_env(), *p_arguments[i]));
+		args.push_back(godot_to_napi(env, *p_arguments[i]));
 	}
 
 	try {
-		Napi::Value result = func.Call(JsEnvManager::get_env().Global(), args);
+		Napi::Value result = func.Call(env.Global(), args);
 		r_return_value = napi_to_godot(result);
 		r_call_error.error = GDEXTENSION_CALL_OK;
 	} catch (const Napi::Error &e) {

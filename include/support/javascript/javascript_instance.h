@@ -20,6 +20,9 @@ class JavascriptInstance {
 	mutable std::vector<godot::PropertyInfo> prop_list_cache;
 	mutable std::vector<GDExtensionPropertyInfo> prop_list_gde;
 
+private:
+	void notification_bind(Napi::Object instance, int32_t p_what, bool p_reversed);
+
 public:
 	JavascriptInstance(const godot::Ref<Javascript> &p_javascript, godot::Object *p_owner, bool p_placeholder);
 	~JavascriptInstance();
@@ -33,7 +36,7 @@ public:
 	bool has_method(const godot::StringName &p_method) const;
 	int32_t get_method_argument_count(const godot::StringName &p_method, bool &r_is_valid) const;
 	godot::Variant call(const godot::StringName &p_method, const godot::Variant *p_args, int32_t p_argcount, GDExtensionCallError &r_error);
-
+	void notification(int32_t p_what, bool p_reversed);
 	godot::String to_string(bool &r_is_valid) const;
 
 	bool property_can_revert(const godot::StringName &p_name) const;

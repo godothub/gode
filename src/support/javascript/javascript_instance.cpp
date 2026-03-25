@@ -59,7 +59,6 @@ bool _find_script_method_from_prototype_chain(const Napi::Object &p_instance, co
 }
 
 } // namespace
-
 JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Object *p_owner, bool p_placeholder) :
 		javascript(p_javascript),
 		owner(p_owner),
@@ -75,14 +74,15 @@ JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Obje
 
 		v8::Locker locker(NodeRuntime::isolate);
 		v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-		Napi::HandleScope scope(JsEnvManager::get_env());
+		v8::HandleScope handle_scope(NodeRuntime::isolate);
 
 		Napi::Function default_class = javascript->get_default_class();
 		if (default_class.IsEmpty() || default_class.IsUndefined() || default_class.IsNull()) {
 			return;
 		}
 
-		Napi::Value external_owner = Napi::External<godot::Object>::New(JsEnvManager::get_env(), owner);
+		Napi::Env env = default_class.Env();
+		Napi::Value external_owner = Napi::External<godot::Object>::New(env, owner);
 		Napi::Object instance = default_class.New({ external_owner });
 		js_instance = Napi::Persistent(instance);
 	}
@@ -113,7 +113,8 @@ bool JavascriptInstance::set(const StringName &p_name, const Variant &p_value) {
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	std::string property_name = String(p_name).utf8().get_data();
 	if (js_instance.Value().HasOwnProperty(property_name)) {
-		return js_instance.Set(property_name, godot_to_napi(JsEnvManager::get_env(), p_value));
+		Napi::Env env = js_instance.Value().Env();
+		return js_instance.Set(property_name, godot_to_napi(env, p_value));
 	}
 	return false;
 }
@@ -156,7 +157,7 @@ bool JavascriptInstance::has_method(const StringName &p_method) const {
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	Napi::Object instance = js_instance.Value();
 	std::string method_name = String(p_method).utf8().get_data();
-	return _find_script_method_from_prototype_chain(instance, method_name);
+	return instance.Has(method_name);
 }
 
 int32_t JavascriptInstance::get_method_argument_count(const StringName &p_method, bool &r_is_valid) const {
@@ -178,26 +179,77 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 	}
 
 	v8::Locker locker(NodeRuntime::isolate);
-	Napi::HandleScope scope(JsEnvManager::get_env());
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	Napi::Object instance = js_instance.Value();
+	Napi::Env env = instance.Env();
 	std::string method_name = String(p_method).utf8().get_data();
 
-	Napi::Function method;
-	if (!_find_script_method_from_prototype_chain(instance, method_name, &method)) {
+	bool ret = false;
+	napi_is_exception_pending(env, &ret);
+
+	if (!instance.Has(method_name)) {
 		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 		return Variant();
 	}
 
+	if (!instance.Get(method_name).IsFunction()) {
+		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+		return Variant();
+	}
+
+	Napi::Function method = js_instance.Get(method_name).As<Napi::Function>();
+
 	std::vector<napi_value> args;
 	for (int i = 0; i < p_argcount; ++i) {
-		Napi::Value jsvalue = godot_to_napi(JsEnvManager::get_env(), p_args[i]);
+		Napi::Value jsvalue = godot_to_napi(env, p_args[i]);
 		args.push_back(jsvalue);
 	}
 
 	Napi::Value result = method.Call(instance, args);
 	r_error.error = GDEXTENSION_CALL_OK;
 	return napi_to_godot(result);
+}
+
+void JavascriptInstance::notification_bind(Napi::Object instance, int32_t p_what, bool p_reversed) {
+	static std::string notification_method_name = "_notification";
+	Napi::Value method_val;
+	if (!instance.IsUndefined() && instance.HasOwnProperty(notification_method_name)) {
+		method_val = instance.Get(notification_method_name);
+		if (method_val.IsFunction()) {
+			Napi::Object globalObject = instance.Env().Global().Get("Object").As<Napi::Object>();
+			Napi::Function getPrototypeOf = globalObject.Get("getPrototypeOf").As<Napi::Function>();
+			Napi::Object proto = getPrototypeOf.Call(globalObject, { instance }).As<Napi::Object>();
+
+			if (!p_reversed) {
+				notification_bind(proto, p_what, p_reversed);
+			}
+
+			Napi::Function method = method_val.As<Napi::Function>();
+			Napi::Value result = method.Call(instance, { Napi::Number::New(instance.Env(), p_what), Napi::Boolean::New(instance.Env(), p_reversed) });
+
+			if (p_reversed) {
+				notification_bind(proto, p_what, p_reversed);
+			}
+		}
+	}
+}
+
+void JavascriptInstance::notification(int32_t p_what, bool p_reversed) {
+	if (placeholder) {
+		return;
+	}
+	if (js_instance.IsEmpty()) {
+		return;
+	}
+
+	v8::Locker locker(NodeRuntime::isolate);
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
+
+	Napi::Object instance = js_instance.Value();
+	notification_bind(instance, p_what, p_reversed);
 }
 
 String JavascriptInstance::to_string(bool &r_is_valid) const {
@@ -211,7 +263,7 @@ String JavascriptInstance::to_string(bool &r_is_valid) const {
 	}
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
-	Napi::HandleScope scope(JsEnvManager::get_env());
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	Napi::Object obj = js_instance.Value();
 	Napi::Value proto_val = obj.Get("__proto__");
 	if (proto_val.IsObject()) {

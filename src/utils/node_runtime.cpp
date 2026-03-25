@@ -21,18 +21,11 @@
 
 namespace gode {
 
-static napi_env js_env = nullptr;
-void JsEnvManager::init(Napi::Env env) {
-	js_env = env;
-}
-Napi::Env JsEnvManager::get_env() {
-	return Napi::Env(js_env);
-}
-
 static bool node_initialized = false;
 static std::unique_ptr<node::MultiIsolatePlatform> platform;
 static std::unique_ptr<node::ArrayBufferAllocator> allocator;
 static node::IsolateData *isolate_data = nullptr;
+static thread_local napi_env thread_local_env = nullptr;
 
 v8::Isolate *NodeRuntime::isolate = nullptr;
 node::Environment *NodeRuntime::env = nullptr;
@@ -79,7 +72,7 @@ static Napi::Value fs_stat(const Napi::CallbackInfo &info) {
 }
 
 static Napi::Object InitGodeAddon(Napi::Env env, Napi::Object exports) {
-	gode::JsEnvManager::init(env);
+	thread_local_env = env;
 	gode::register_builtin(env, exports);
 	gode::register_classes(env, exports);
 	gode::GD::init(env, exports);
@@ -536,12 +529,31 @@ Napi::Value NodeRuntime::compile_script(const std::string &code, const std::stri
 		init_once();
 	}
 
+	// v8::Isolate::Scope isolate_scope(isolate);
+	// v8::HandleScope handle_scope(isolate);
+
+	v8::Local<v8::Context> context = node_context.Get(isolate);
+	v8::Context::Scope context_scope(context);
+
 	// 检测是否为 ESM
+	v8::Local<v8::Value> result;
 	if (is_esm_file(filename, code)) {
-		return compile_esm_module(code, filename);
+		result = compile_esm_module(code, filename);
 	} else {
-		return compile_cjs_module(code, filename);
+		result = compile_cjs_module(code, filename);
 	}
+
+	if (result.IsEmpty()) {
+		return Napi::Value();
+	}
+
+	// 使用thread_local_env来转换v8值为Napi::Value
+	if (thread_local_env == nullptr) {
+		godot::UtilityFunctions::printerr("[compile_script] Error: thread_local_env is not set");
+		return Napi::Value();
+	}
+
+	return Napi::Value(thread_local_env, reinterpret_cast<napi_value>(*result));
 }
 
 bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &code) {
@@ -600,7 +612,7 @@ bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &co
 	return false;
 }
 
-Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::string &filename) {
+v8::Local<v8::Value> NodeRuntime::compile_esm_module(const std::string &code, const std::string &filename) {
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
 	v8::EscapableHandleScope escapable_scope(isolate);
@@ -609,7 +621,7 @@ Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::
 	v8::Local<v8::Value> fn_val;
 	if (!context->Global()->Get(context, fn_name).ToLocal(&fn_val) || !fn_val->IsFunction()) {
 		godot::UtilityFunctions::print("compile_esm_module: __gode_compile_esm not found");
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Function> fn = fn_val.As<v8::Function>();
@@ -623,7 +635,7 @@ Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::
 
 	if (result.IsEmpty()) {
 		godot::UtilityFunctions::print("compile_esm_module: fn->Call returned empty");
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Value> promise_val = result.ToLocalChecked();
@@ -631,7 +643,7 @@ Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::
 	// 检查是否是 Promise
 	if (!promise_val->IsPromise()) {
 		godot::UtilityFunctions::print("compile_esm_module: result is not a Promise");
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Promise> promise = promise_val.As<v8::Promise>();
@@ -646,20 +658,20 @@ Napi::Value NodeRuntime::compile_esm_module(const std::string &code, const std::
 		// 尝试获取错误信息
 		v8::String::Utf8Value error_str(isolate, error);
 		godot::UtilityFunctions::print("compile_esm_module: Promise rejected: ", *error_str);
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Value> final_exports = promise->Result();
 
 	if (final_exports->IsUndefined()) {
 		v8::Local<v8::Value> undefined_val = v8::Undefined(isolate);
-		return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(undefined_val)));
+		return escapable_scope.Escape(undefined_val);
 	}
 
-	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(final_exports)));
+	return escapable_scope.Escape(final_exports);
 }
 
-Napi::Value NodeRuntime::compile_cjs_module(const std::string &code, const std::string &filename) {
+v8::Local<v8::Value> NodeRuntime::compile_cjs_module(const std::string &code, const std::string &filename) {
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
 	v8::EscapableHandleScope escapable_scope(isolate);
@@ -667,7 +679,7 @@ Napi::Value NodeRuntime::compile_cjs_module(const std::string &code, const std::
 	v8::Local<v8::String> fn_name = v8::String::NewFromUtf8Literal(isolate, "__gode_compile");
 	v8::Local<v8::Value> fn_val;
 	if (!context->Global()->Get(context, fn_name).ToLocal(&fn_val) || !fn_val->IsFunction()) {
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Function> fn = fn_val.As<v8::Function>();
@@ -681,17 +693,17 @@ Napi::Value NodeRuntime::compile_cjs_module(const std::string &code, const std::
 
 	if (result.IsEmpty()) {
 		godot::UtilityFunctions::print("compile_cjs_module: fn->Call returned empty (exception?)");
-		return Napi::Value();
+		return v8::Local<v8::Value>();
 	}
 
 	v8::Local<v8::Value> final_exports = result.ToLocalChecked();
 
 	if (final_exports->IsUndefined()) {
 		v8::Local<v8::Value> undefined_val = v8::Undefined(isolate);
-		return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(undefined_val)));
+		return escapable_scope.Escape(undefined_val);
 	}
 
-	return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escapable_scope.Escape(final_exports)));
+	return escapable_scope.Escape(final_exports);
 }
 
 Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
@@ -719,10 +731,11 @@ Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
 		Napi::Value default_export = exports_obj.Get("default");
 		v8::Local<v8::Object> export_obj = reinterpret_cast<v8::Value *>(static_cast<napi_value>(default_export))->ToObject(context).ToLocalChecked();
 		v8::Local<v8::Function> export_func = export_obj.As<v8::Function>();
-		if (default_export.IsFunction()) {
-			v8::Local<v8::Value> escaped_val = escapable_scope.Escape(export_func);
-			return Napi::Value(JsEnvManager::get_env(), reinterpret_cast<napi_value>(*escaped_val)).As<Napi::Function>();
-		}
+	if (default_export.IsFunction()) {
+		v8::Local<v8::Value> escaped_val = escapable_scope.Escape(export_func);
+		Napi::Env env = module_exports.Env();
+		return Napi::Value(env, reinterpret_cast<napi_value>(*escaped_val)).As<Napi::Function>();
+	}
 	}
 
 	return Napi::Function();
