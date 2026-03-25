@@ -1,0 +1,116 @@
+{
+	"nodes": [
+		{
+			"name": "RootSelector_1",
+			"type": "selector",
+			"title": "根选择器 1",
+			"position": {
+				"x": 0,
+				"y": 0
+			},
+			"properties": {}
+		},
+		{
+			"name": "HealthCheck_2",
+			"type": "condition",
+			"title": "条件判断 2",
+			"position": {
+				"x": -300,
+				"y": 150
+			},
+			"properties": {
+				"condition_type": "health_percent",
+				"operator": "lt",
+				"value": 30
+			}
+		},
+		{
+			"name": "RetreatAction_3",
+			"type": "action",
+			"title": "行动节点 3",
+			"position": {
+				"x": -300,
+				"y": 300
+			},
+			"properties": {
+				"action_type": "retreat",
+				"target": "nearest_ally",
+				"duration": 3
+			}
+		},
+		{
+			"name": "EnemyInRange_4",
+			"type": "condition",
+			"title": "条件判断 4",
+			"position": {
+				"x": 0,
+				"y": 150
+			},
+			"properties": {
+				"condition_type": "enemies_in_range",
+				"operator": "gt",
+				"value": 0
+			}
+		},
+		{
+			"name": "AttackAction_5",
+			"type": "action",
+			"title": "行动节点 5",
+			"position": {
+				"x": 0,
+				"y": 300
+			},
+			"properties": {
+				"action_type": "attack",
+				"target": "nearest_enemy",
+				"duration": 1
+			}
+		},
+		{
+			"name": "MoveAction_6",
+			"type": "action",
+			"title": "行动节点 6",
+			"position": {
+				"x": 300,
+				"y": 300
+			},
+			"properties": {
+				"action_type": "move",
+				"target": "nearest_enemy",
+				"duration": 2
+			}
+		}
+	],
+	"connections": [
+		{
+			"from_node": "RootSelector_1",
+			"from_port": 0,
+			"to_node": "HealthCheck_2",
+			"to_port": 0
+		},
+		{
+			"from_node": "HealthCheck_2",
+			"from_port": 0,
+			"to_node": "RetreatAction_3",
+			"to_port": 0
+		},
+		{
+			"from_node": "RootSelector_1",
+			"from_port": 1,
+			"to_node": "EnemyInRange_4",
+			"to_port": 0
+		},
+		{
+			"from_node": "EnemyInRange_4",
+			"from_port": 0,
+			"to_node": "AttackAction_5",
+			"to_port": 0
+		},
+		{
+			"from_node": "EnemyInRange_4",
+			"from_port": 1,
+			"to_node": "MoveAction_6",
+			"to_port": 0
+		}
+	]
+}

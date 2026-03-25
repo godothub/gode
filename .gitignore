@@ -21,6 +21,7 @@ example/addons/gode/bin/*
 example/node_modules
 example/export_presets.cfg
 example/dist
+example-1
 
 # Ignore generated files
 include/generated

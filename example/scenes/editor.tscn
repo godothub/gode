@@ -1,0 +1,125 @@
+[gd_scene format=3 uid="uid://c8ng02ep0x1cu"]
+
+[ext_resource type="Script" path="res://scripts/battle_ai_editor_demo.ts" id="1_6i3h2"]
+
+[node name="Editor" type="Control" unique_id=1860860984]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_6i3h2")
+
+[node name="MainSplit" type="HSplitContainer" parent="." unique_id=2052649110]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+split_offsets = PackedInt32Array(500)
+split_offset = 500
+
+[node name="LeftPanel" type="VBoxContainer" parent="MainSplit" unique_id=530640704]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TitleLabel" type="Label" parent="MainSplit/LeftPanel" unique_id=2103905380]
+layout_mode = 2
+text = "战棋 AI 编辑器 - 最小 Demo"
+
+[node name="Toolbar" type="HBoxContainer" parent="MainSplit/LeftPanel" unique_id=1923466331]
+layout_mode = 2
+
+[node name="AddMoveButton" type="Button" parent="MainSplit/LeftPanel/Toolbar" unique_id=2096858291]
+layout_mode = 2
+text = "新增 Move"
+
+[node name="AddAttackButton" type="Button" parent="MainSplit/LeftPanel/Toolbar" unique_id=1434305931]
+layout_mode = 2
+text = "新增 Attack"
+
+[node name="AddWaitButton" type="Button" parent="MainSplit/LeftPanel/Toolbar" unique_id=562330144]
+layout_mode = 2
+text = "新增 Wait"
+
+[node name="ExportButton" type="Button" parent="MainSplit/LeftPanel/Toolbar" unique_id=1422968701]
+layout_mode = 2
+text = "导出 JSON"
+
+[node name="GraphEdit" type="GraphEdit" parent="MainSplit/LeftPanel" unique_id=1707857228]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RightPanel" type="VBoxContainer" parent="MainSplit" unique_id=426272985]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="BoardTitle" type="Label" parent="MainSplit/RightPanel" unique_id=329680939]
+layout_mode = 2
+text = "棋盘编辑与执行"
+
+[node name="BrushBar" type="HBoxContainer" parent="MainSplit/RightPanel" unique_id=920890763]
+layout_mode = 2
+
+[node name="BrushLabel" type="Label" parent="MainSplit/RightPanel/BrushBar" unique_id=1676331111]
+layout_mode = 2
+text = "刷子:"
+
+[node name="BrushOption" type="OptionButton" parent="MainSplit/RightPanel/BrushBar" unique_id=458893471]
+layout_mode = 2
+size_flags_horizontal = 3
+selected = 1
+item_count = 4
+popup/item_0/text = "空地"
+popup/item_0/id = 0
+popup/item_1/text = "障碍"
+popup/item_1/id = 1
+popup/item_2/text = "友军起点"
+popup/item_2/id = 2
+popup/item_3/text = "敌军位置"
+popup/item_3/id = 3
+
+[node name="ActionBar" type="HBoxContainer" parent="MainSplit/RightPanel" unique_id=431663213]
+layout_mode = 2
+
+[node name="RunStepButton" type="Button" parent="MainSplit/RightPanel/ActionBar" unique_id=921707376]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "执行一步 AI"
+
+[node name="ResetButton" type="Button" parent="MainSplit/RightPanel/ActionBar" unique_id=1204061923]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "重置棋盘"
+
+[node name="BoardScroll" type="ScrollContainer" parent="MainSplit/RightPanel" unique_id=1033922075]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="BoardGrid" type="GridContainer" parent="MainSplit/RightPanel/BoardScroll" unique_id=1033922076]
+layout_mode = 2
+columns = 6
+size_flags_horizontal = 3
+size_flags_vertical = 0
+custom_minimum_size = Vector2(0, 0)
+
+[node name="StatusLabel" type="Label" parent="MainSplit/RightPanel" unique_id=1002453722]
+layout_mode = 2
+
+[node name="LogOutput" type="RichTextLabel" parent="MainSplit/RightPanel" unique_id=2018451256]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="JsonOutput" type="TextEdit" parent="MainSplit/RightPanel" unique_id=1185229428]
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+editable = false

@@ -10,8 +10,10 @@ config_version=5
 
 [application]
 
-run/main_scene="uid://dw6dfmym4yj11"
-config/features=PackedStringArray("4.6")
+config/name="ez-chess"
+run/main_scene="uid://dtfqi6vyll8pe"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+config/icon="res://icon.svg"
 
 [autoload]
 
@@ -28,3 +30,5 @@ enabled=PackedStringArray("res://addons/gode/plugin.cfg")
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

@@ -65,9 +65,6 @@ if exist "%TSCONFIG%" (
         echo     "esModuleInterop": true,
         echo     "skipLibCheck": true,
         echo     "jsx": "react",
-        echo     "paths": {
-        echo       "@gode/*": ["./addons/gode/core/*"]
-        echo     }
         echo   },
         echo   "include": ["**/*.ts", "**/*.tsx"],
         echo   "exclude": ["node_modules", "dist"]
@@ -92,9 +89,6 @@ if exist "%PKGJSON%" (
         echo   },
         echo   "dependencies": {
         echo     "typescript": "^5.9.3"
-        echo   },
-        echo   "devDependencies": {
-        echo     "tsc-alias": "^1.8.10"
         echo   }
         echo }
     ) > "%PKGJSON%"

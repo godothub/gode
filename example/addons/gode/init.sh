@@ -61,10 +61,7 @@ else
     "rootDir": ".",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "jsx": "react",
-    "paths": {
-      "@gode/*": ["./addons/gode/core/*"]
-    }
+    "jsx": "react"
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", "dist"]
@@ -89,9 +86,6 @@ else
   },
   "dependencies": {
     "typescript": "^5.9.3"
-  },
-  "devDependencies": {
-    "tsc-alias": "^1.8.10"
   }
 }
 EOF
