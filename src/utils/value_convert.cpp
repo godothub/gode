@@ -42,6 +42,7 @@
 #include "builtin/vector4_binding.gen.h"
 #include "builtin/vector4i_binding.gen.h"
 #include "support/javascript/javascript_callable.h"
+#include "utils/node_runtime.h"
 
 // Helper macros for creating N-API objects from Godot variants
 #define BIND_BUILTIN_TO_NAPI(VariantType, BindingClass)               \

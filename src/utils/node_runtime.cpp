@@ -11,6 +11,8 @@
 #undef CONNECT_DEFERRED
 #endif
 
+#include "utils/value_convert.h"
+
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/json.hpp>
@@ -71,6 +73,11 @@ static Napi::Value fs_stat(const Napi::CallbackInfo &info) {
 	return Napi::Number::New(env, 0); // Not found
 }
 
+static Napi::Value Export(const Napi::CallbackInfo &info) {
+	Napi::Env env = info.Env();
+	return env.Undefined();
+}
+
 static Napi::Object InitGodeAddon(Napi::Env env, Napi::Object exports) {
 	thread_local_env = env;
 	gode::register_builtin(env, exports);
@@ -79,6 +86,9 @@ static Napi::Object InitGodeAddon(Napi::Env env, Napi::Object exports) {
 
 	exports.Set("fs_readFile", Napi::Function::New(env, fs_readFile));
 	exports.Set("fs_stat", Napi::Function::New(env, fs_stat));
+
+	Napi::Object global = env.Global();
+	global.Set("Export", Napi::Function::New(env, Export));
 
 	return exports;
 }
@@ -609,6 +619,23 @@ bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &co
 	return false;
 }
 
+bool NodeRuntime::is_esm_file() {
+	godot::String gd_pkg_path = godot::String::utf8("res://package.json");
+	if (godot::FileAccess::file_exists(gd_pkg_path)) {
+		godot::Ref<godot::FileAccess> file = godot::FileAccess::open(gd_pkg_path, godot::FileAccess::READ);
+		if (file.is_valid()) {
+			godot::String content = file->get_as_text();
+			godot::Dictionary json = static_cast<godot::Dictionary>(godot::JSON::parse_string(content));
+			if (static_cast<godot::String>(json["type"]) == "module") {
+				return true;
+			} else if (static_cast<godot::String>(json["type"]) == "commonjs") {
+				return false;
+			}
+		}
+	}
+	return false;
+}
+
 v8::Local<v8::Value> NodeRuntime::compile_esm_module(const std::string &code, const std::string &filename) {
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
@@ -659,7 +686,6 @@ v8::Local<v8::Value> NodeRuntime::compile_esm_module(const std::string &code, co
 	}
 
 	v8::Local<v8::Value> final_exports = promise->Result();
-
 	if (final_exports->IsUndefined()) {
 		v8::Local<v8::Value> undefined_val = v8::Undefined(isolate);
 		return escapable_scope.Escape(undefined_val);
@@ -704,38 +730,58 @@ v8::Local<v8::Value> NodeRuntime::compile_cjs_module(const std::string &code, co
 }
 
 Napi::Function NodeRuntime::get_default_class(Napi::Value module_exports) {
-	v8::EscapableHandleScope escapable_scope(isolate);
-	v8::Local<v8::Context> context = node_context.Get(isolate);
-	v8::Context::Scope context_scope(context);
-
-	if (module_exports.IsEmpty()) {
-		godot::UtilityFunctions::print("get_default_class: module_exports is Empty");
+	if (module_exports.IsEmpty() || module_exports.IsUndefined()) {
 		return Napi::Function();
 	}
 
-	if (module_exports.IsUndefined()) {
-		godot::UtilityFunctions::print("get_default_class: module_exports is Undefined");
-		return Napi::Function();
-	}
-
-	Napi::Object exports_obj = module_exports.As<Napi::Object>();
-
+	// 直接是函数，返回
 	if (module_exports.IsFunction()) {
 		return module_exports.As<Napi::Function>();
 	}
 
-	if (exports_obj.Has("default")) {
-		Napi::Value default_export = exports_obj.Get("default");
-		v8::Local<v8::Object> export_obj = reinterpret_cast<v8::Value *>(static_cast<napi_value>(default_export))->ToObject(context).ToLocalChecked();
-		v8::Local<v8::Function> export_func = export_obj.As<v8::Function>();
-	if (default_export.IsFunction()) {
-		v8::Local<v8::Value> escaped_val = escapable_scope.Escape(export_func);
-		Napi::Env env = module_exports.Env();
-		return Napi::Value(env, reinterpret_cast<napi_value>(*escaped_val)).As<Napi::Function>();
-	}
+	// 尝试获取 default 导出
+	if (module_exports.IsObject()) {
+		Napi::Object exports_obj = module_exports.As<Napi::Object>();
+		if (exports_obj.Has("default")) {
+			Napi::Value default_export = exports_obj.Get("default");
+			if (default_export.IsFunction()) {
+				return default_export.As<Napi::Function>();
+			}
+		}
 	}
 
 	return Napi::Function();
+}
+
+godot::Variant NodeRuntime::eval_expression(const std::string &expr) {
+	if (!node_initialized || !env) {
+		return godot::Variant();
+	}
+
+	std::string code = "(function() { return " + expr + "; })()";
+
+	v8::Local<v8::Context> context = node_context.Get(isolate);
+	v8::Context::Scope context_scope(context);
+	v8::TryCatch try_catch(isolate);
+
+	v8::MaybeLocal<v8::String> maybe_source = v8::String::NewFromUtf8(isolate, code.c_str());
+	if (maybe_source.IsEmpty() || try_catch.HasCaught()) {
+		return godot::Variant();
+	}
+
+	v8::MaybeLocal<v8::Script> maybe_script = v8::Script::Compile(context, maybe_source.ToLocalChecked());
+	if (maybe_script.IsEmpty() || try_catch.HasCaught()) {
+		return godot::Variant();
+	}
+
+	v8::MaybeLocal<v8::Value> maybe_result = maybe_script.ToLocalChecked()->Run(context);
+	if (maybe_result.IsEmpty() || try_catch.HasCaught()) {
+		return godot::Variant();
+	}
+
+	v8::Local<v8::Value> result = maybe_result.ToLocalChecked();
+	Napi::Value napi_result(thread_local_env, reinterpret_cast<napi_value>(*result));
+	return napi_to_godot(napi_result);
 }
 
 void NodeRuntime::spin_loop() {
