@@ -1,9 +1,34 @@
 ﻿#include "support/javascript/javascript_language.h"
 #include "godot_cpp/core/memory.hpp"
 #include "support/javascript/javascript.h"
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
 using namespace gode;
+
+static int32_t start_tsc_watch(const String &project_dir) {
+	String tsconfig = project_dir.path_join("tsconfig.json");
+	if (!FileAccess::file_exists(tsconfig)) {
+		return -1;
+	}
+
+	String os_name = OS::get_singleton()->get_name();
+	PackedStringArray args;
+	String executable;
+
+	if (os_name == "Windows") {
+		executable = "cmd.exe";
+		args = PackedStringArray({ "/c", "cd /d \"" + project_dir + "\" && tsc --watch --preserveWatchOutput" });
+	} else {
+		executable = "bash";
+		args = PackedStringArray({ "-lc", "cd \"" + project_dir + "\" && tsc --watch --preserveWatchOutput" });
+	}
+
+	return OS::get_singleton()->create_process(executable, args);
+}
 
 JavascriptLanguage *JavascriptLanguage::singleton = nullptr;
 
@@ -34,6 +59,11 @@ String JavascriptLanguage::_get_name() const {
 }
 
 void JavascriptLanguage::_init() {
+	String project_dir = ProjectSettings::get_singleton()->globalize_path("res://");
+	tsc_watch_pid = start_tsc_watch(project_dir);
+	if (tsc_watch_pid < 0) {
+		UtilityFunctions::push_warning("gode: tsconfig.json not found, tsc --watch not started");
+	}
 }
 
 String JavascriptLanguage::_get_type() const {
@@ -45,6 +75,10 @@ String JavascriptLanguage::_get_extension() const {
 }
 
 void JavascriptLanguage::_finish() {
+	if (tsc_watch_pid >= 0) {
+		OS::get_singleton()->kill(tsc_watch_pid);
+		tsc_watch_pid = -1;
+	}
 }
 
 PackedStringArray JavascriptLanguage::_get_reserved_words() const {

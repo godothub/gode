@@ -579,6 +579,13 @@ class DtsGenerator(CodeGenerator):
             lines.append(f'  type {name} = Godot{name};')
             lines.append(f'  const {name}: typeof Godot{name};')
 
+        lines.append('  interface ExportOptions {')
+        lines.append('    hint?: number;')
+        lines.append('    hintString?: string;')
+        lines.append('  }')
+        lines.append('')
+        lines.append('  function Export(options?: ExportOptions): any;')
+        lines.append('')
         lines.append('  interface ExportEntry {')
         lines.append('    type: string;')
         lines.append('    hint?: number;')
