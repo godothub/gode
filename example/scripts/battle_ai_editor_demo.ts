@@ -16,14 +16,6 @@ import {
 type Cell = { x: number; y: number };
 
 export default class BattleAiEditorDemo extends Control {
-	static exports: ExportMap = {
-		_hello: {
-			type: "string",
-			default: "hello world",
-		}
-	};
-
-	_hello: string = "";
 
 	private readonly BOARD_SIZE = 6;
 	private readonly ENEMY_MAX_HP = 3;

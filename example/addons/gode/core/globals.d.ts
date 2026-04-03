@@ -153,10 +153,18 @@ declare global {
   const GD: typeof GodotGD;
   type VariantArgument = GodotVariantArgument;
   const VariantArgument: typeof GodotVariantArgument;
+  interface ExportOptions {
+    hint?: number;
+    hintString?: string;
+  }
+
+  function Export(options?: ExportOptions): any;
+
   interface ExportEntry {
     type: string;
     hint?: number;
     hint_string?: string;
+    default?: VariantArgument;
   }
   type ExportMap = Record<string, ExportEntry>;
 }

@@ -1,15 +1,16 @@
-import { Control } from "godot";
+import { Control } from 'godot';
 
 export default class Test extends Control {
-	static exports: ExportMap = {
-		_hello: {
+	static exports = {
+		v: {
 			type: "string",
-		},
-	};
-
-	_hello: string = "hello";
- 
+			default: "hello"
+		}
+	}
+	
+	v!: string;
+	
 	_ready(): void {
-		GD.print(this._hello);
-	} 
+		GD.print(this.v);
+	}
 }
