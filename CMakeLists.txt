@@ -24,17 +24,15 @@ add_subdirectory(godot-cpp)
 
 # -----------------------------------------------------------------------------
 # Node-Addon-API & LibNode
+# 注意：libnode.dll 需用户手动编译（cd node && vcbuild.bat dll release nosign）
 # -----------------------------------------------------------------------------
 
-# Path to node-addon-api (header-only wrapper for N-API)
 set(NODE_ADDON_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/node-addon-api")
 
 if(NOT EXISTS "${NODE_ADDON_API_DIR}/napi.h")
-    message(WARNING "node-addon-api headers not found at ${NODE_ADDON_API_DIR}. Please check path.")
+    message(WARNING "node-addon-api headers not found at ${NODE_ADDON_API_DIR}.")
 endif()
 
-# Path to Node.js source or install
-# If using source, we need headers from src, deps/v8/include, deps/uv/include
 set(NODE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/node")
 set(NODE_INCLUDE_DIRS
     "${NODE_ROOT}/src"
@@ -42,54 +40,28 @@ set(NODE_INCLUDE_DIRS
     "${NODE_ROOT}/deps/uv/include"
 )
 
-# Try to find libnode library
-# On Windows, we look for node.lib
-if(WIN32)
-    # Common locations for prebuilt node.lib or build artifacts
-    # You might need to adjust this path or pass -DNODE_LIBRARY=path/to/node.lib
-    # Prioritize libnode (DLL import lib) over node (EXE export lib)
-    
-    set(NODE_ROOT_OUT "${NODE_ROOT}/out")
-    
-    # Define debug and release library paths (prefer libnode.lib for DLL import lib)
-    # Check if libnode.lib exists (usually for shared library build), otherwise fallback to node.lib
-    
-    if(EXISTS "${NODE_ROOT_OUT}/Debug/libnode.lib")
-        set(NODE_LIB_DEBUG "${NODE_ROOT_OUT}/Debug/libnode.lib")
-    else()
-        set(NODE_LIB_DEBUG "${NODE_ROOT_OUT}/Debug/node.lib")
-    endif()
+set(NODE_ROOT_OUT "${NODE_ROOT}/out")
+set(NODE_LIB_RELEASE "${NODE_ROOT_OUT}/Release/libnode.lib")
+set(NODE_DLL_RELEASE "${NODE_ROOT_OUT}/Release/libnode.dll")
+set(NODE_DEF_RELEASE "${NODE_ROOT_OUT}/Release/node.def")
+set(NODE_LIB_DEBUG   "${NODE_ROOT_OUT}/Debug/libnode.lib")
+set(NODE_DLL_DEBUG   "${NODE_ROOT_OUT}/Debug/libnode.dll")
 
-    if(EXISTS "${NODE_ROOT_OUT}/Release/libnode.lib")
-        set(NODE_LIB_RELEASE "${NODE_ROOT_OUT}/Release/libnode.lib")
-    else()
-        set(NODE_LIB_RELEASE "${NODE_ROOT_OUT}/Release/node.lib")
-    endif()
-    
-    if(EXISTS "${NODE_LIB_DEBUG}" AND EXISTS "${NODE_LIB_RELEASE}")
-        # If both exist, use generator expression to select based on configuration
-        set(NODE_LIBRARY "$<$<CONFIG:Debug>:${NODE_LIB_DEBUG}>$<$<CONFIG:Release>:${NODE_LIB_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${NODE_LIB_RELEASE}>$<$<CONFIG:MinSizeRel>:${NODE_LIB_RELEASE}>")
-        message(STATUS "Found both Debug and Release node.lib, will select based on build config.")
-    elseif(EXISTS "${NODE_LIB_DEBUG}")
-        set(NODE_LIBRARY "${NODE_LIB_DEBUG}")
-        message(STATUS "Found only Debug node.lib at ${NODE_LIBRARY}")
-    elseif(EXISTS "${NODE_LIB_RELEASE}")
-        set(NODE_LIBRARY "${NODE_LIB_RELEASE}")
-        message(STATUS "Found only Release node.lib at ${NODE_LIBRARY}")
-    endif()
-
-    if(NOT NODE_LIBRARY)
-        find_library(NODE_LIBRARY NAMES libnode node
-            PATHS
-            "${NODE_ROOT_OUT}/Release"
-            "${NODE_ROOT_OUT}/Debug"
-            NO_DEFAULT_PATH
-        )
-    endif()
+if(NOT EXISTS "${NODE_LIB_RELEASE}")
+    message(FATAL_ERROR
+        "未找到 libnode.lib，请先手动编译 Node.js：\n"
+        "  cd ${NODE_ROOT}\n"
+        "  vcbuild.bat dll release nosign"
+    )
 endif()
 
-if(NOT NODE_LIBRARY)
-    message(WARNING "libnode library not found. Linking might fail. Please set NODE_LIBRARY manually using -DNODE_LIBRARY=path/to/libnode.")
+# Debug 回退到 Release
+if(EXISTS "${NODE_LIB_DEBUG}")
+    set(NODE_LIBRARY "$<$<CONFIG:Debug>:${NODE_LIB_DEBUG}>$<$<NOT:$<CONFIG:Debug>>:${NODE_LIB_RELEASE}>")
+    set(NODE_DLL_TO_COPY "$<$<CONFIG:Debug>:${NODE_DLL_DEBUG}>$<$<NOT:$<CONFIG:Debug>>:${NODE_DLL_RELEASE}>")
+else()
+    set(NODE_LIBRARY "${NODE_LIB_RELEASE}")
+    set(NODE_DLL_TO_COPY "${NODE_DLL_RELEASE}")
 endif()
 
 #
@@ -208,66 +180,40 @@ if(MINGW)
     # 目前 godot-cpp 会根据 MINGW 变量自动处理，这里主要关注 gode 自身的链接
 endif()
 
-if(NODE_LIBRARY)
-    target_link_libraries(gode ${NODE_LIBRARY})
-    
-    # Try to find the corresponding DLL
-    # Note: This logic is partially redundant with the generator expression above but kept for compatibility
-    get_filename_component(NODE_LIB_DIR "${NODE_LIBRARY}" DIRECTORY)
-    
-    # Only search if NODE_LIBRARY is a real path, not a generator expression
-    if(NOT "${NODE_LIBRARY}" MATCHES "\\$<")
-        find_file(NODE_DLL NAMES libnode.dll node.dll
-            PATHS "${NODE_LIB_DIR}"
-            NO_DEFAULT_PATH
-        )
-    endif()
-    
-    # Fallback logic for generator expressions where find_file might not work directly
-    # If NODE_LIBRARY contains generator expressions, we can't easily extract the dir at config time
-    # So we try to guess the DLL path based on the LIB path structure
-    
-    # Define DLL paths
-    set(NODE_DLL_DEBUG "${NODE_ROOT_OUT}/Debug/libnode.dll")
-    set(NODE_DLL_RELEASE "${NODE_ROOT_OUT}/Release/libnode.dll")
+# gode 链接 libnode，并确保 node_stub 随之构建
+target_link_libraries(gode "${NODE_LIBRARY}")
+add_dependencies(gode node_stub)
 
-    # Select DLL based on configuration for debugging
-    set(NODE_DLL_TO_COPY "$<$<CONFIG:Debug>:${NODE_DLL_DEBUG}>$<$<CONFIG:Release>:${NODE_DLL_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${NODE_DLL_RELEASE}>$<$<CONFIG:MinSizeRel>:${NODE_DLL_RELEASE}>")
+add_custom_command(TARGET gode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${NODE_DLL_TO_COPY}"
+        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>/libnode.dll"
+    COMMENT "复制 libnode.dll 到输出目录"
+)
 
-    add_custom_command(TARGET gode POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Copying libnode.dll from: ${NODE_DLL_TO_COPY}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${NODE_DLL_TO_COPY}"
-            "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
-    )
+# node.dll — 纯转发存根 DLL，供 win_delay_load_hook 使用。
+# win_delay_load_hook.cc 调用 GetModuleHandleA("node.dll") 获取 NAPI 函数地址；
+# node.def 每条导出为 "symbol = libnode.symbol"，无 V8 代码，纯转发。
+set(NODE_STUB_SRC "${CMAKE_BINARY_DIR}/node_stub_empty.c")
+file(WRITE "${NODE_STUB_SRC}" "// Empty stub — all exports are forwarders via node.def\n")
 
-    # node.dll — 纯转发存根 DLL，供 cmake-js NAPI addon 的 win_delay_load_hook 使用。
-    # win_delay_load_hook.cc 调用 GetModuleHandleA("node.dll") 来获取 NAPI 函数地址；
-    # 若找不到 node.dll 则 fallback 到 GodotEngine.exe（不导出 NAPI）→ null 调用 → 崩溃。
-    # node.def 每条导出已是 "symbol = libnode.symbol" 格式，故此 DLL 无 V8 代码，纯转发。
-    set(NODE_STUB_SRC "${CMAKE_BINARY_DIR}/node_stub_empty.c")
-    file(WRITE "${NODE_STUB_SRC}" "// Empty stub — all exports are forwarders via node.def\n")
+add_library(node_stub SHARED "${NODE_STUB_SRC}")
+set_target_properties(node_stub PROPERTIES OUTPUT_NAME "node" PREFIX "")
+target_link_options(node_stub PRIVATE
+    "/DEF:${NODE_DEF_RELEASE}"
+    "/NOENTRY"
+    "/NODEFAULTLIB"
+)
+target_link_libraries(node_stub PRIVATE "${NODE_LIB_RELEASE}")
 
-    add_library(node_stub SHARED "${NODE_STUB_SRC}")
-    set_target_properties(node_stub PROPERTIES
-        OUTPUT_NAME "node"
-        PREFIX ""
-    )
-    target_link_options(node_stub PRIVATE
-        "/DEF:${NODE_ROOT_OUT}/Release/node.def"
-        "/NOENTRY"
-        "/NODEFAULTLIB"
-    )
-    target_link_libraries(node_stub PRIVATE "$<$<CONFIG:Debug>:${NODE_LIB_DEBUG}>$<$<CONFIG:Release>:${NODE_LIB_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${NODE_LIB_RELEASE}>$<$<CONFIG:MinSizeRel>:${NODE_LIB_RELEASE}>")
-
-    add_custom_command(TARGET node_stub POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:node_stub>
-            "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>/node.dll"
-    )
-endif()
+add_custom_command(TARGET node_stub POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:node_stub>
+        "${CMAKE_SOURCE_DIR}/example/addons/gode/bin/$<CONFIG>/node.dll"
+    COMMENT "复制 node.dll (转发存根) 到输出目录"
+)
 
 add_custom_command(TARGET gode POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
