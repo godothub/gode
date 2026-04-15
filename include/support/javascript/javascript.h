@@ -46,6 +46,7 @@ public:
 	const godot::HashMap<godot::StringName, godot::PropertyInfo> &get_exported_properties() const { return properties; }
 	const godot::Vector<godot::PropertyInfo> &get_property_list_ordered() const { return property_list; }
 	const godot::HashMap<godot::StringName, godot::Variant> &get_property_defaults() const { return property_defaults; }
+	godot::StringName get_base_class_name() const { compile(); return base_class_name; }
 
 protected:
 	static void _bind_methods();

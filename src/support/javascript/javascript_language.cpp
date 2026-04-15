@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
@@ -344,5 +345,15 @@ bool JavascriptLanguage::_handles_global_class_type(const String &p_type) const 
 
 Dictionary JavascriptLanguage::_get_global_class_name(const String &p_path) const {
 	Dictionary d;
+	Ref<Javascript> script = ResourceLoader::get_singleton()->load(p_path, "", ResourceLoader::CACHE_MODE_REUSE);
+	if (script.is_null()) {
+		return d;
+	}
+	StringName name = script->_get_global_name();
+	if (name == StringName()) {
+		return d;
+	}
+	d["name"] = name;
+	d["base_type"] = script->get_base_class_name();
 	return d;
 }

@@ -15,7 +15,7 @@ using namespace gode;
 extern "C" const TSLanguage *tree_sitter_typescript();
 
 static Variant::Type parse_type_string(const std::string &type_str) {
-	if (type_str == "bool") {
+	if (type_str == "bool" || type_str == "boolean") {
 		return Variant::BOOL;
 	}
 	if (type_str == "int") {
@@ -517,17 +517,83 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 		const char *member_type = ts_node_type(member);
 
 		if (strcmp(member_type, "public_field_definition") == 0) {
-			// 扫描装饰器，检测 @Export
+			// 扫描装饰器，检测 @Export 并解析其参数
 			bool has_export_decorator = false;
+			PropertyHint export_hint = PROPERTY_HINT_NONE;
+			String export_hint_string;
 			for (uint32_t k = 0; k < ts_node_child_count(member); k++) {
 				TSNode child = ts_node_child(member, k);
-				if (strcmp(ts_node_type(child), "decorator") == 0) {
-					uint32_t ds = ts_node_start_byte(child);
-					uint32_t de = ts_node_end_byte(child);
-					std::string deco_text = source.substr(ds, de - ds);
-					if (deco_text.find("@Export") == 0) {
-						has_export_decorator = true;
+				if (strcmp(ts_node_type(child), "decorator") != 0) {
+					continue;
+				}
+				uint32_t ds = ts_node_start_byte(child);
+				uint32_t de = ts_node_end_byte(child);
+				std::string deco_text = source.substr(ds, de - ds);
+				if (deco_text.find("@Export") != 0) {
+					continue;
+				}
+				has_export_decorator = true;
+				// 解析 @Export(...) 的参数：找 call_expression / decorator_call_expression
+				for (uint32_t di = 0; di < ts_node_named_child_count(child); di++) {
+					TSNode expr = ts_node_named_child(child, di);
+					TSNode args = ts_node_child_by_field_name(expr, "arguments", 9);
+					if (ts_node_is_null(args)) {
+						break;
 					}
+					uint32_t nargs = ts_node_named_child_count(args);
+					if (nargs == 0) {
+						break;
+					}
+					TSNode first_arg = ts_node_named_child(args, 0);
+					const char *first_type = ts_node_type(first_arg);
+					if (strcmp(first_type, "object") == 0) {
+						// @Export({ hint: N, hintString: "..." })
+						for (uint32_t pi = 0; pi < ts_node_named_child_count(first_arg); pi++) {
+							TSNode pair = ts_node_named_child(first_arg, pi);
+							if (strcmp(ts_node_type(pair), "pair") != 0) {
+								continue;
+							}
+							TSNode key = ts_node_child_by_field_name(pair, "key", 3);
+							TSNode val = ts_node_child_by_field_name(pair, "value", 5);
+							if (ts_node_is_null(key) || ts_node_is_null(val)) {
+								continue;
+							}
+							std::string key_str = source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key));
+							uint32_t vs_b = ts_node_start_byte(val);
+							uint32_t ve_b = ts_node_end_byte(val);
+							std::string val_str = source.substr(vs_b, ve_b - vs_b);
+							if (key_str == "hint") {
+								Variant v = NodeRuntime::eval_expression(val_str);
+								if (v.get_type() != Variant::NIL) {
+									export_hint = (PropertyHint)(int)v;
+								}
+							} else if (key_str == "hintString") {
+								if (val_str.size() >= 2 && (val_str.front() == '"' || val_str.front() == '\'')) {
+									export_hint_string = String(val_str.substr(1, val_str.size() - 2).c_str());
+								}
+							}
+						}
+					} else {
+						// @Export(hint) 或 @Export(hint, "hintString")
+						uint32_t vs_b = ts_node_start_byte(first_arg);
+						uint32_t ve_b = ts_node_end_byte(first_arg);
+						Variant v = NodeRuntime::eval_expression(source.substr(vs_b, ve_b - vs_b));
+						if (v.get_type() != Variant::NIL) {
+							export_hint = (PropertyHint)(int)v;
+						}
+						if (nargs >= 2) {
+							TSNode second_arg = ts_node_named_child(args, 1);
+							if (strcmp(ts_node_type(second_arg), "string") == 0) {
+								uint32_t ss = ts_node_start_byte(second_arg);
+								uint32_t se = ts_node_end_byte(second_arg);
+								std::string hs = source.substr(ss, se - ss);
+								if (hs.size() >= 2) {
+									export_hint_string = String(hs.substr(1, hs.size() - 2).c_str());
+								}
+							}
+						}
+					}
+					break;
 				}
 			}
 
@@ -587,7 +653,8 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 			PropertyInfo pi;
 			pi.name = field_name;
 			pi.usage = PROPERTY_USAGE_DEFAULT;
-			pi.hint = PROPERTY_HINT_NONE;
+			pi.hint = export_hint;
+			pi.hint_string = export_hint_string;
 			pi.type = Variant::NIL;
 
 			std::string type_str;

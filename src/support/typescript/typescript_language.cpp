@@ -1,6 +1,7 @@
 #include "support/typescript/typescript_language.h"
 #include "support/typescript/typescript.h"
 #include <godot_cpp/core/memory.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 
 using namespace godot;
 using namespace gode;
@@ -71,5 +72,15 @@ Object *TypescriptLanguage::_create_script() const {
 
 Dictionary TypescriptLanguage::_get_global_class_name(const String &p_path) const {
 	Dictionary d;
+	Ref<Typescript> script = ResourceLoader::get_singleton()->load(p_path, "", ResourceLoader::CACHE_MODE_REUSE);
+	if (script.is_null()) {
+		return d;
+	}
+	StringName name = script->_get_global_name();
+	if (name == StringName()) {
+		return d;
+	}
+	d["name"] = name;
+	d["base_type"] = script->get_base_class_name();
 	return d;
 }

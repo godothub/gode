@@ -158,13 +158,13 @@ declare global {
     hintString?: string;
   }
 
+  function Export(hint: number, hintString?: string): any;
   function Export(options?: ExportOptions): any;
 
   interface ExportEntry {
     type: string;
     hint?: number;
     hint_string?: string;
-    default?: VariantArgument;
   }
   type ExportMap = Record<string, ExportEntry>;
 }
