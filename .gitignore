@@ -8,6 +8,7 @@ dist/
 
 # Python cache files
 __pycache__/
+.venv/
 *.pyc
 
 # Generated C++ bindings

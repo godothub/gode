@@ -11,8 +11,8 @@ windows.release.x86_64 = "res://addons/gode/binary/windows/x64/libgode.dll"
 linux.debug.x86_64 = "res://addons/gode/binary/linux/x64/libgode.so"
 linux.release.x86_64 = "res://addons/gode/binary/linux/x64/libgode.so"
 
-macos.debug = "res://addons/gode/binary/macos/x64/libgode.dylib"
-macos.release = "res://addons/gode/binary/macos/x64/libgode.dylib"
+macos.debug.arm64 = "res://addons/gode/binary/macos/arm64/libgode.dylib"
+macos.release.arm64 = "res://addons/gode/binary/macos/arm64/libgode.dylib"
 
 android.debug.arm64 = "res://addons/gode/binary/android/arm64/libgode.so"
 android.release.arm64 = "res://addons/gode/binary/android/arm64/libgode.so"
