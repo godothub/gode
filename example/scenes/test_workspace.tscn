@@ -1,0 +1,80 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/test_workspace.js" id="1_workspace"]
+
+[node name="TestWorkspace" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_workspace")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = 16.0
+offset_right = -18.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleBox" type="VBoxContainer" parent="Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="Title" type="Label" parent="Layout/Header/TitleBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Test"
+
+[node name="Summary" type="Label" parent="Layout/Header/TitleBox"]
+layout_mode = 2
+text = "Summary"
+
+[node name="Actions" type="HBoxContainer" parent="Layout/Header"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RunButton" type="Button" parent="Layout/Header/Actions"]
+custom_minimum_size = Vector2(96, 42)
+layout_mode = 2
+text = "Run"
+
+[node name="BackButton" type="Button" parent="Layout/Header/Actions"]
+custom_minimum_size = Vector2(126, 42)
+layout_mode = 2
+text = "Back"
+
+[node name="Body" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="ScriptEditor" type="CodeEdit" parent="Layout/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+highlight_current_line = true
+draw_line_numbers = true
+wrap_mode = 1
+tab_input_mode = true
+placeholder_text = "Edit the test script here."
+
+[node name="OutputPanel" type="TextEdit" parent="Layout/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+editable = false
+wrap_mode = 1
+placeholder_text = "Run output appears here."

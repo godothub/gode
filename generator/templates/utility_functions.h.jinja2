@@ -1,0 +1,20 @@
+#ifndef GODE_UTILITY_FUNCTIONS_H
+#define GODE_UTILITY_FUNCTIONS_H
+
+#include <napi.h>
+#include <godot_cpp/variant/utility_functions.hpp>
+
+namespace gode {
+class GD : public Napi::ObjectWrap<GD> {
+public:
+	static Napi::Object init(Napi::Env env, Napi::Object exports);
+	GD(const Napi::CallbackInfo &info);
+
+private:
+    {% for func in utility_functions %}
+	Napi::Value {{ func.name }}(const Napi::CallbackInfo &info);
+    {% endfor %}
+};
+} //namespace gode
+
+#endif // GODE_UTILITY_FUNCTIONS_H

@@ -1,0 +1,43 @@
+#include "register_classes.gen.h"
+#include <node.h>
+#include <node_api.h>
+
+// Classes
+{% for item in classes %}
+#include "{{ item.include }}"
+{% endfor %}
+
+namespace gode {
+
+void register_classes(Napi::Env env, Napi::Object exports) {
+    // Register Classes
+    {% for item in classes %}
+    {{ item.class_name }}Binding::init(env, exports);
+    {% endfor %}
+
+    // Register Singletons
+    {% for singleton in singletons %}
+    if (env.Global().Get("{{ singleton.name }}").IsUndefined()) {
+        env.Global().DefineProperty(Napi::PropertyDescriptor::Accessor(
+            env, 
+            env.Global(), 
+            "{{ singleton.name }}", 
+            [](const Napi::CallbackInfo &info) -> Napi::Value {
+                static Napi::ObjectReference ref;
+                if (ref.IsEmpty()) {
+                    godot::{{ singleton.type }}* instance = godot::{{ singleton.type }}::get_singleton();
+                    if (!instance) return info.Env().Null();
+                    Napi::Object obj = {{ singleton.binding_type }}Binding::create_singleton(info.Env(), instance);
+                    ref = Napi::Persistent(obj);
+                    ref.SuppressDestruct();
+                }
+                return ref.Value();
+            },
+            napi_enumerable,
+            nullptr
+        ));
+    }
+    {% endfor %}
+}
+
+} // namespace gode

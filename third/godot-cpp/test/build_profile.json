@@ -1,0 +1,14 @@
+{
+	"enabled_classes": [
+		"Control",
+		"InputEventKey",
+		"Label",
+		"MultiplayerAPI",
+		"MultiplayerPeer",
+		"OS",
+		"TileMap",
+		"TileSet",
+		"Tween",
+		"Viewport"
+	]
+}

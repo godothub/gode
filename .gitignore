@@ -1,0 +1,23 @@
+# Vendored binary dependencies
+libnode/
+
+# Build output
+build/
+build-*/
+dist/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Generated C++ bindings
+include/generated/
+src/generated/
+
+# Generated TypeScript declarations
+example/addons/gode/types/
+
+# Example addon binaries: keep the Godot extension manifest, ignore built libraries.
+example/addons/gode/binary/*
+!example/addons/gode/binary/.gdextension
+!example/addons/gode/binary/.gdextension.uid

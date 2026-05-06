@@ -1,0 +1,14 @@
+# Godot editor cache and export output
+.godot/
+/android/
+/build/
+/build-*/
+/exports/
+
+# TypeScript / Node output
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

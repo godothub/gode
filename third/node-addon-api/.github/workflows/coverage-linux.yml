@@ -1,0 +1,68 @@
+name: Coverage Linux
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - benchmark/**
+      - doc/**
+      - tools/**
+      - unit-test/**
+      - .github/**
+      - '!.github/workflows/coverage-linux.yml'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - benchmark/**
+      - doc/**
+      - tools/**
+      - unit-test/**
+      - .github/**
+      - '!.github/workflows/coverage-linux.yml'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '22.x'
+
+permissions:
+  contents: read
+
+jobs:
+  coverage-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Environment Information
+        run: npx envinfo
+      - name: Install gcovr
+        run: pip install gcovr==6.0
+      - name: Install dependencies
+        run: npm install
+      - name: Test with coverage
+        run: |
+          npm run create-coverage
+      - name: Generate coverage report (XML)
+        run: |
+          npm run report-coverage-xml
+      - name: Upload
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v5.5.2
+        with:
+          directory: ./coverage-xml

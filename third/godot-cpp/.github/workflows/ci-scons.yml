@@ -1,0 +1,230 @@
+name: Continuous integration
+on:
+  workflow_call:
+
+env:
+  # Only used for the cache key. Increment version to force clean build.
+  GODOT_BASE_BRANCH: master
+  # Use UTF-8 on Linux.
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  # Use UTF-8 on Windows.
+  PYTHONIOENCODING: utf8
+
+concurrency:
+  group: ci-scons-${{ github.actor }}-${{ github.head_ref || github.run_number }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-scons:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 🐧 Linux (GCC)
+            os: ubuntu-22.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release
+            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            run-tests: true
+            api-version: 4.7
+            cache-name: linux-x86_64
+
+          - name: 🐧 Linux (GCC) for Godot 4.6
+            os: ubuntu-22.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot45
+            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            run-tests: true
+            api-version: 4.6
+            godot-test-versions: "4.6-stable"
+            cache-name: linux-x86_64-godot45
+
+          - name: 🐧 Linux (GCC) for Godot 4.5
+            os: ubuntu-22.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot45
+            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            run-tests: true
+            api-version: 4.5
+            godot-test-versions: "4.5-stable 4.6-stable"
+            cache-name: linux-x86_64-godot45
+
+          - name: 🐧 Linux (GCC) for Godot 4.4
+            os: ubuntu-22.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot44
+            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            run-tests: true
+            api-version: 4.4
+            godot-test-versions: "4.4-stable 4.5-stable 4.6-stable"
+            cache-name: linux-x86_64-godot44
+
+          - name: 🐧 Linux (GCC) for Godot 4.3
+            os: ubuntu-22.04
+            platform: linux
+            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot43
+            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            run-tests: true
+            api-version: 4.3
+            godot-test-versions: "4.3-stable 4.4-stable 4.5-stable 4.6-stable"
+            cache-name: linux-x86_64-godot43
+
+          - name: 🏁 Windows (x86_64, MSVC)
+            os: windows-2022
+            platform: windows
+            artifact-name: godot-cpp-windows-msvc2019-x86_64-release
+            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.lib
+            run-tests: false
+            cache-name: windows-x86_64-msvc
+
+          - name: 🏁 Windows (x86_64, MinGW)
+            os: windows-2022
+            platform: windows
+            artifact-name: godot-cpp-linux-mingw-x86_64-release
+            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.a
+            flags: use_mingw=yes
+            run-tests: false
+            cache-name: windows-x86_64-mingw
+
+          - name: 🍎 macOS (universal)
+            os: macos-latest
+            platform: macos
+            artifact-name: godot-cpp-macos-universal-release
+            artifact-path: bin/libgodot-cpp.macos.template_release.universal.a
+            flags: arch=universal
+            run-tests: false
+            cache-name: macos-universal
+
+          - name: 🤖 Android (arm64)
+            os: ubuntu-22.04
+            platform: android
+            artifact-name: godot-cpp-android-arm64-release
+            artifact-path: bin/libgodot-cpp.android.template_release.arm64.a
+            flags: arch=arm64
+            run-tests: false
+            cache-name: android-arm64
+
+          - name: 🍏 iOS (arm64)
+            os: macos-latest
+            platform: ios
+            artifact-name: godot-cpp-ios-arm64-release
+            artifact-path: bin/libgodot-cpp.ios.template_release.arm64.a
+            flags: arch=arm64
+            run-tests: false
+            cache-name: ios-arm64
+
+          - name: 🌐 Web (wasm32)
+            os: ubuntu-22.04
+            platform: web
+            artifact-name: godot-cpp-web-wasm32-release
+            artifact-path: bin/libgodot-cpp.web.template_release.wasm32.a
+            run-tests: false
+            cache-name: web-wasm32
+
+    env:
+      SCONS_CACHE: ${{ github.workspace }}/.scons-cache/
+      EM_VERSION: 4.0.11
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: ${{ matrix.cache-name }}
+        continue-on-error: true
+
+      - name: Setup godot-cpp
+        uses: ./.github/actions/setup-godot-cpp
+        with:
+          platform: ${{ matrix.platform }}
+          windows-compiler: ${{ contains(matrix.flags, 'use_mingw=yes') && 'mingw' || 'msvc' }}
+          buildtool: scons
+
+      - name: Generate godot-cpp sources only
+        run: |
+          scons platform=${{ matrix.platform }} verbose=yes build_library=no ${{ matrix.flags }} ${{ matrix.api-version && format('api_version={0}', matrix.api-version) || '' }}
+          scons -c
+
+      - name: Build godot-cpp (debug)
+        run: |
+          scons platform=${{ matrix.platform }} verbose=yes target=template_debug ${{ matrix.flags }} ${{ matrix.api-version && format('api_version={0}', matrix.api-version) || '' }}
+
+
+      - name: Build test without rebuilding godot-cpp (debug)
+        run: |
+          cd test
+          scons platform=${{ matrix.platform }} verbose=yes build_library=no target=template_debug ${{ matrix.flags }} ${{ matrix.api-version && format('api_version={0}', matrix.api-version) || '' }}
+
+      - name: Build test and godot-cpp (release)
+        run: |
+          cd test
+          scons platform=${{ matrix.platform }} verbose=yes target=template_release ${{ matrix.flags }} ${{ matrix.api-version && format('api_version={0}', matrix.api-version) || '' }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: ${{ matrix.cache-name }}
+        continue-on-error: true
+
+      - name: Download latest Godot artifacts
+        uses: dsnopek/action-download-artifact@1322f74e2dac9feed2ee76a32d9ae1ca3b4cf4e9
+        if: matrix.run-tests
+        with:
+          repo: godotengine/godot
+          branch: master
+          event: push
+          workflow: linux_builds.yml
+          workflow_conclusion: success
+          name: linux-editor-mono
+          search_artifacts: true
+          check_artifacts: true
+          ensure_latest: true
+          path: godot-artifacts
+
+      - name: Prepare Godot artifacts for testing
+        if: matrix.run-tests
+        run: |
+          mkdir ./godot-builds
+          mv ./godot-artifacts/godot.linuxbsd.editor.x86_64.mono ./godot-builds/godot-master
+          mv ./godot-artifacts/GodotSharp ./godot-builds/
+          chmod +x ./godot-builds/godot-master
+
+      - name: Download supported Godot versions for testing
+        if: matrix.run-tests && matrix.godot-test-versions
+        run: |
+          for version in ${{ matrix.godot-test-versions }}; do
+            wget "https://github.com/godotengine/godot-builds/releases/download/${version}/Godot_v${version}_linux.x86_64.zip" -O Godot.zip
+            unzip -a Godot.zip
+            mv "Godot_v${version}_linux.x86_64" "./godot-builds/godot-${version}"
+            chmod +x "./godot-builds/godot-${version}"
+            rm Godot.zip
+          done
+
+      - name: Run tests
+        if: matrix.run-tests
+        run: |
+          GODOT_BUILDS="$(pwd)/godot-builds"
+          cd test
+          for version in ${{ matrix.godot-test-versions }} master; do
+            rm -rf ./project/.godot
+            export GODOT="${GODOT_BUILDS}/godot-${version}"
+            $GODOT --headless --version
+            # Need to run the editor so .godot is generated... but it crashes! Ignore that :-)
+            (cd project && (timeout 30 $GODOT --import --headless >/dev/null 2>&1 || true))
+            ./run-tests.sh
+          done
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error

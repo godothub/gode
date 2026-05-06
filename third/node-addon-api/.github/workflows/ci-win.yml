@@ -1,0 +1,67 @@
+name: Node.js CI Windows Platform
+
+on: [push, pull_request]
+
+env:
+  PYTHON_VERSION: '3.11'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api_version:
+          - standard
+          - experimental
+        node-version:
+          - 20.x
+          - 22.x
+          - 24.x
+          - 25.x
+        architecture: [x64, x86]
+        os:
+          - windows-2022
+          - windows-2025
+        exclude:
+          # Skip when node 24.x or 25.x AND architecture is x86 since there is
+          # no published Node.js x86 build for those versions.
+          - node-version: 24.x
+            architecture: x86
+          - node-version: 25.x
+            architecture: x86
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+      with:
+        egress-policy: audit
+
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: ${{ matrix.node-version }}
+        architecture: ${{ matrix.architecture }}
+    - name: Check Node.js installation
+      run: |
+        node --version
+        npm --version
+    - name: Install dependencies
+      run: |
+        npm install
+    - name: npm test
+      shell: bash
+      run: |
+        if [ "${{ matrix.api_version }}" = "experimental" ]; then
+          export NAPI_VERSION=2147483647
+        fi
+        npm run pretest -- --verbose
+        node test

@@ -1,0 +1,21 @@
+[configuration]
+
+entry_symbol = "node_library_init"
+compatibility_minimum = "4.6.2"
+
+[libraries]
+
+windows.debug.x86_64 = "res://addons/gode/binary/windows/x64/libgode.dll"
+windows.release.x86_64 = "res://addons/gode/binary/windows/x64/libgode.dll"
+
+linux.debug.x86_64 = "res://addons/gode/binary/linux/x64/libgode.so"
+linux.release.x86_64 = "res://addons/gode/binary/linux/x64/libgode.so"
+
+macos.debug = "res://addons/gode/binary/macos/x64/libgode.dylib"
+macos.release = "res://addons/gode/binary/macos/x64/libgode.dylib"
+
+android.debug.arm64 = "res://addons/gode/binary/android/arm64/libgode.so"
+android.release.arm64 = "res://addons/gode/binary/android/arm64/libgode.so"
+
+ios.debug.arm64 = "res://addons/gode/binary/ios/arm64/libgode.dylib"
+ios.release.arm64 = "res://addons/gode/binary/ios/arm64/libgode.dylib"

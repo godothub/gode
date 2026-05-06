@@ -1,0 +1,45 @@
+#include "utility_functions/utility_functions.h"
+#include "utility_functions/utility_functions_vararg_method.h"
+#include "napi.h"
+#include "utils/func_utils.h"
+#include <godot_cpp/variant/utility_functions.hpp>
+
+namespace gode {
+
+Napi::Object GD::init(Napi::Env env, Napi::Object exports) {
+	// Define the class and its methods
+	Napi::Function func = DefineClass(env, "GD", {
+        {% for func in utility_functions %}
+		InstanceMethod("{{ func.name }}", &GD::{{ func.name }}),
+        {% endfor %}
+	});
+
+	// Create an instance of the class
+	Napi::Object gd_instance = func.New({});
+
+	// Register it as a global object named "GD"
+	Napi::Object global = env.Global();
+	global.Set("GD", gd_instance);
+	
+	// Also export it just in case
+	exports.Set("GD", gd_instance);
+	
+	return exports;
+}
+
+GD::GD(const Napi::CallbackInfo &info) :
+		Napi::ObjectWrap<GD>(info) {
+	this->SuppressDestruct();
+}
+
+{% for func in utility_functions %}
+Napi::Value GD::{{ func.name }}(const Napi::CallbackInfo &info) {
+    {% if func.is_vararg %}
+    return call_builtin_method(&gode::utility::{{ func.name }}_internal, info);
+    {% else %}
+    return call_builtin_method(&godot::UtilityFunctions::{{ func.cpp_name }}, info);
+    {% endif %}
+}
+{% endfor %}
+
+} //namespace gode

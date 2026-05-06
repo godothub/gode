@@ -1,0 +1,279 @@
+#include "{{ header_include }}"
+#include "utils/func_utils.h"
+#include "utils/value_convert.h"
+#include <godot_cpp/variant/utility_functions.hpp>
+{% if vararg_header_include %}
+#include "{{ vararg_header_include }}"
+{% endif %}
+{% if inherits %}
+#include "{{ parent_include }}"
+{% endif %}
+
+{% for dep in dependencies %}
+#include <{{ dep }}>
+{% endfor %}
+
+namespace gode {
+
+Napi::FunctionReference {{ class_name }}Binding::constructor;
+
+Napi::Object {{ class_name }}Binding::create_singleton(Napi::Env env, godot::{{ godot_class_name }}* instance) {
+    Napi::External<godot::{{ godot_class_name }}> external = Napi::External<godot::{{ godot_class_name }}>::New(env, instance);
+    return constructor.New({external});
+}
+
+godot::Object *{{ class_name }}Binding_unwrap(const Napi::Object &obj) {
+    return {{ class_name }}Binding::Unwrap(obj)->instance;
+}
+
+void {{ class_name }}Binding_wrap(const Napi::Object &obj, godot::Object *instance) {
+    {{ class_name }}Binding::Unwrap(obj)->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(instance);
+}
+
+Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
+    if (!constructor.IsEmpty()) {
+        if (constructor.Env() == env) {
+            return constructor.Value();
+        } else {
+            godot::UtilityFunctions::print("Warning: {{ class_name }} constructor found but env mismatch. Re-defining.");
+        }
+    }
+
+    Napi::Function func = DefineClass(env, "{{ js_class_name }}", {
+        {% for method in methods %}
+        {% if method.is_static %}
+        StaticMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name_cpp }}),
+        {% endif %}
+        {% endfor %}
+    });
+
+    {% if inherits %}
+    Napi::Function parent_ctor = {{ parent_class_name }}Binding::get_class_constructor(env);
+    if (!parent_ctor.IsEmpty()) {
+        func.As<Napi::Object>().Set("__proto__", parent_ctor);
+        Napi::Value parent_proto = parent_ctor.Get("prototype");
+        if (parent_proto.IsObject()) {
+            func.As<Napi::Object>().Get("prototype").As<Napi::Object>().Set("__proto__", parent_proto);
+        }
+    } else {
+        godot::UtilityFunctions::print("Error: Parent class {{ parent_class_name }} constructor is empty for {{ class_name }}");
+    }
+    {% endif %}
+
+    // Manually attach methods to prototype to avoid InstanceMethod's strict 'this' check
+    Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
+    // Mark generated C++ binding prototypes so script method lookup can stop before entering bindings.
+    prototype.Set(Napi::Symbol::For(env, "__gode.cpp_binding__"), Napi::Boolean::New(env, true));
+    // Add signals
+    {% for signal in signals %}
+    {
+        Napi::PropertyDescriptor descriptor = Napi::PropertyDescriptor::Accessor(
+            "{{ signal.name }}",
+            &{{ class_name }}Binding::signal_{{ signal.name }},
+            napi_default
+        );
+        prototype.DefineProperty(descriptor);
+    }
+    {% endfor %}
+
+    // Add properties
+    {% for prop in properties %}
+    {% if prop.getter and prop.setter %}
+    {
+        Napi::PropertyDescriptor descriptor = Napi::PropertyDescriptor::Accessor(
+            "{{ prop.name }}",
+            &{{ class_name }}Binding::{{ prop.getter }},
+            &{{ class_name }}Binding::{{ prop.setter }},
+            napi_default
+        );
+        prototype.DefineProperty(descriptor);
+    }
+    {% endif %}
+    {% endfor %}
+
+    // Add toString method
+    prototype.Set("toString", Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "toString"));
+    prototype.Set(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "inspect"));
+
+    {% for method in methods %}
+    {% if not method.is_static %}
+    prototype.Set("{{ method.name }}", Napi::Function::New(env, &{{ class_name }}Binding::{{ method.name_cpp }}, "{{ method.name }}"));
+    {% endif %}
+    {% endfor %}
+
+    constructor = Napi::Persistent(func);
+    constructor.SuppressDestruct();
+    return func;
+}
+
+Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
+    Napi::Function func = get_class_constructor(env);
+    
+    // For Singletons, we don't want to expose the class constructor to JS.
+    // We only register it internally so we can wrap instances.
+    {% if not is_singleton %}
+    exports.Set("{{ js_class_name }}", func);
+    {% endif %}
+    
+    register_class("{{ js_class_name }}", &constructor, &{{ class_name }}Binding_unwrap, &{{ class_name }}Binding_wrap);
+    
+    return exports;
+}
+
+{{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) {
+    if (info.Length() == 1 && info[0].IsExternal()) {
+        instance = info[0].As<Napi::External<godot::{{ godot_class_name }}>>().Data();
+    } else if (info.Length() == 1 && info[0].IsObject()) {
+        instance = Unwrap(info[0].As<Napi::Object>())->instance;
+    } else {
+        {% if is_instantiable %}
+        instance = memnew(godot::{{ godot_class_name }});
+        {% else %}
+        instance = nullptr;
+        {% endif %}
+    }
+    
+    if (instance) {
+        internal_object_id = instance->get_instance_id();
+        register_godot_instance(instance, info.This().As<Napi::Object>());
+    }
+}
+
+{{ class_name }}Binding::~{{ class_name }}Binding() {
+    {% if is_ref_counted %}
+    if (internal_object_id != 0) {
+        godot::Object* obj = godot::ObjectDB::get_instance(internal_object_id);
+        if (obj) {
+            godot::RefCounted* ref = godot::Object::cast_to<godot::RefCounted>(obj);
+            if (ref) {
+                ref->unreference();
+                if (ref->get_reference_count() == 0) {
+            		godot::memdelete(ref);
+            	}
+            }
+        }
+    }
+    {% elif is_node %}
+    if (internal_object_id != 0) {
+        godot::Object* obj = godot::ObjectDB::get_instance(internal_object_id);
+        if (obj) {
+            godot::Node* node = godot::Object::cast_to<godot::Node>(obj);
+            if (node && !node->is_inside_tree()) {
+            	godot::memdelete(node);
+            }
+        }
+    }
+    {% endif %}
+}
+
+Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) {
+    Napi::Object js_this = info.This().As<Napi::Object>();
+    {{ class_name }}Binding* binding_instance = {{ class_name }}Binding::Unwrap(js_this);
+    godot::{{ godot_class_name }}* instance = binding_instance->instance;
+    if (!instance) {
+        return Napi::String::New(info.Env(), "null");
+    }
+    if (binding_instance->internal_object_id != 0) {
+        godot::Object* obj = godot::ObjectDB::get_instance(binding_instance->internal_object_id);
+        if (!obj) {
+            binding_instance->instance = nullptr;
+            return Napi::String::New(info.Env(), "null (freed)");
+        }
+    }
+    return Napi::String::New(info.Env(), instance->to_string().utf8().get_data());
+}
+
+{% for signal in signals %}
+Napi::Value {{ class_name }}Binding::signal_{{ signal.name }}(const Napi::CallbackInfo& info) {
+    Napi::Object js_this = info.This().As<Napi::Object>();
+    {{ class_name }}Binding* binding_instance = {{ class_name }}Binding::Unwrap(js_this);
+    godot::{{ godot_class_name }}* instance = binding_instance->instance;
+    if (!instance) {
+        return info.Env().Null();
+    }
+    godot::Signal signal(instance, "{{ signal.name }}");
+    return godot_to_napi(info.Env(),signal);
+}
+{% endfor %}
+
+{% for method in methods %}
+Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackInfo& info) {
+    {% if not method.is_static %}
+    Napi::Object js_this = info.This().As<Napi::Object>();
+    {{ class_name }}Binding* binding_instance = {{ class_name }}Binding::Unwrap(js_this);
+
+    /*
+    if (binding_instance->internal_object_id != 0) {
+        godot::Object* obj = godot::ObjectDB::get_instance(binding_instance->internal_object_id);
+        if (!obj) {
+            binding_instance->instance = nullptr;
+            Napi::Error::New(info.Env(), "Object has been deleted").ThrowAsJavaScriptException();
+            return info.Env().Null();
+        }
+        binding_instance->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(obj);
+    }
+    */
+
+    godot::{{ godot_class_name }}* instance = binding_instance->instance;
+    if (!instance) {
+         Napi::Error::New(info.Env(), "Object is null").ThrowAsJavaScriptException();
+         return info.Env().Null();
+    }
+    {% endif %}
+        {% if method.is_static %}
+        {% if method.is_vararg %}
+            {% if method.return_type %}
+    return call_builtin_method(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, info);
+            {% else %}
+    return call_builtin_method(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, info);
+            {% endif %}
+        {% else %}
+            {% if method.return_type %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+            {% else %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+            {% endif %}
+        {% endif %}
+    {% else %}
+        {% if method.is_vararg %}
+            {% if method.return_type %}
+    return call_builtin_method(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, instance, info);
+            {% else %}
+    return call_builtin_method(&gode::classes::{{ snake_name }}::{{ method.name_cpp }}_internal, instance, info);
+            {% endif %}
+        {% else %}
+            {% if method.is_const %}
+                {% if method.return_type %}
+                    {% if method.cast_signature %}
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% else %}
+                    {% if method.cast_signature %}
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% endif %}
+            {% else %}
+                {% if method.return_type %}
+                    {% if method.cast_signature %}
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% else %}
+                    {% if method.cast_signature %}
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+                    {% else %}
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    {% endif %}
+}
+{% endfor %}
+
+} // namespace gode

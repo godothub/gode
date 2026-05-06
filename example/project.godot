@@ -1,0 +1,38 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="gode-example"
+run/main_scene="res://scenes/main_menu.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+boot_splash/stretch_mode=0
+boot_splash/use_filter=false
+boot_splash/image="uid://blhgh808br6o6"
+config/icon="uid://bihghsjcc5la3"
+
+[autoload]
+
+EventLoop="*res://addons/gode/runtime/event_loop.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gode/plugin.cfg")
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
