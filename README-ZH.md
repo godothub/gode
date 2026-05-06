@@ -1,5 +1,7 @@
 # Gode
 
+[EN Doc](https://github.com/godothub/gode) &nbsp;&nbsp;&nbsp; [中文文档](https://github.com/godothub/gode/blob/main/README-ZH.md)
+
 Godot引擎的JavaScript/TypeScript支持，底层采用V8引擎和NodeJS，运行在所有原生平台！
 
 | 平台 | Windows | Android | macOS | iOS | Linux |

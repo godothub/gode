@@ -1,5 +1,7 @@
 # Gode
 
+[EN Doc](https://github.com/godothub/gode) &nbsp;&nbsp;&nbsp; [中文文档](https://github.com/godothub/gode/blob/main/README-ZH.md)
+
 JavaScript / TypeScript support for the Godot engine. Gode is powered by V8 and Node.js, and runs on all native platforms.
 
 | Platform | Windows | Android | macOS | iOS | Linux |
