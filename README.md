@@ -7,7 +7,7 @@ JavaScript / TypeScript support for the Godot engine. Gode is powered by V8 and 
 | Platform | Windows | Android | macOS | iOS | Linux |
 | --- | --- | --- | --- | --- | --- |
 | Supported | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Min Version | 10 | 9 | 10.15 | 16 | Ubuntu 22 |
+| MinVersion | 10 | 9 | 10.15 | 16 | Ubuntu 22 |
 
 ## Quick Start
 
