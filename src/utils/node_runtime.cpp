@@ -896,9 +896,9 @@ bool NodeRuntime::is_esm_file(const std::string &filename, const std::string &co
 				if (file.is_valid()) {
 					godot::String content = file->get_as_text();
 					godot::Dictionary json = static_cast<godot::Dictionary>(godot::JSON::parse_string(content));
-					if (json["type"] == "module") {
+					if (static_cast<godot::String>(json["type"]) == "module") {
 						return true;
-					} else if (json["type"] == "commonjs") {
+					} else if (static_cast<godot::String>(json["type"]) == "commonjs") {
 						return false;
 					}
 				}
