@@ -22,8 +22,6 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
-    with:
-      package_version: ${{ inputs.tag }}
 
   publish:
     name: Publish GitHub release
@@ -43,4 +41,4 @@ jobs:
           tag_name: ${{ inputs.tag }}
           name: ${{ inputs.tag }}
           prerelease: ${{ inputs.prerelease == 'true' }}
-          files: dist/gode-plugin-${{ inputs.tag }}.zip
+          files: dist/gode.zip

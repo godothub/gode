@@ -3,17 +3,7 @@ name: Build
 on:
   pull_request:
   workflow_dispatch:
-    inputs:
-      package_version:
-        description: Package version used for the generated zip name
-        required: false
-        default: ""
   workflow_call:
-    inputs:
-      package_version:
-        description: Package version used for the generated zip name
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -149,16 +139,8 @@ jobs:
         id: package
         shell: bash
         run: |
-          version="${{ inputs.package_version }}"
-          if [ -z "$version" ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              version="pr-${{ github.event.pull_request.number }}"
-            else
-              version="build-${{ github.run_number }}"
-            fi
-          fi
-          ./.github/shell/package-plugin.sh --version "$version"
-          echo "archive=dist/gode-plugin-$version.zip" >> "$GITHUB_OUTPUT"
+          ./.github/shell/package-plugin.sh
+          echo "archive=dist/gode.zip" >> "$GITHUB_OUTPUT"
 
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4

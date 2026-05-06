@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version=""
 output_directory=""
 skip_binary_validation=0
 
 usage() {
-	printf 'Usage: %s [--version VERSION] [--output-directory DIR] [--skip-binary-validation]\n' "$0"
+	printf 'Usage: %s [--output-directory DIR] [--skip-binary-validation]\n' "$0"
 }
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		--version)
-			version="${2:?missing value for --version}"
-			shift 2
-			;;
 		--output-directory)
 			output_directory="${2:?missing value for --output-directory}"
 			shift 2
@@ -38,22 +33,14 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 
-if [ -z "$version" ]; then
-	if version_text="$(git -C "$repo_root" describe --tags --always 2>/dev/null)" && [ -n "$version_text" ]; then
-		version="$version_text"
-	else
-		version="dev"
-	fi
-fi
-
 if [ -z "$output_directory" ]; then
 	output_directory="$repo_root/dist"
 fi
 
 addon_root="$repo_root/example/addons/gode"
 staging_root="$repo_root/build/package-staging"
-staged_addon_root="$staging_root/addons/gode"
-archive_name="gode-plugin-$version.zip"
+staged_addon_root="$staging_root/gode"
+archive_name="gode.zip"
 archive_path="$output_directory/$archive_name"
 
 required_files=(
@@ -94,7 +81,7 @@ find "$staged_addon_root/binary" -type f \( -name '*.lib' -o -name '*.exp' -o -n
 rm -f "$archive_path"
 (
 	cd "$staging_root"
-	zip -qr "$archive_path" addons
+	zip -qr "$archive_path" gode
 )
 
 printf 'Packaged plugin:\n  %s\n' "$archive_path"
