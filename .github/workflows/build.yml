@@ -33,31 +33,26 @@ jobs:
           - platform: windows
             arch: x64
             runner: windows-2022
-            shell: pwsh
             script: ./shell/build-windows.ps1 -Architecture x64 -Fresh
             artifact_path: example/addons/gode/binary/windows/x64/libgode.dll
           - platform: linux
             arch: x64
             runner: ubuntu-22.04
-            shell: bash
             script: ./shell/build-linux.sh --arch x64 --fresh
             artifact_path: example/addons/gode/binary/linux/x64/libgode.so
           - platform: macos
             arch: arm64
             runner: macos-26
-            shell: bash
             script: ./shell/build-macos.sh --arch arm64 --deployment-target 10.15 --fresh
             artifact_path: example/addons/gode/binary/macos/arm64/libgode.dylib
           - platform: ios
             arch: arm64
             runner: macos-26
-            shell: bash
             script: ./shell/build-ios.sh --arch arm64 --fresh
             artifact_path: example/addons/gode/binary/ios/arm64/libgode.dylib
           - platform: android
             arch: arm64
             runner: macos-26
-            shell: bash
             script: ./shell/build-android.sh --arch arm64 --fresh
             artifact_path: example/addons/gode/binary/android/arm64/libgode.so
 
@@ -81,8 +76,14 @@ jobs:
           ./.github/shell/prepare-libnode.sh
           --url "${{ env.LIBNODE_URL }}"
 
-      - name: Build
-        shell: ${{ matrix.shell }}
+      - name: Build Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ${{ matrix.script }}
+
+      - name: Build Unix
+        if: matrix.platform != 'windows'
+        shell: bash
         run: ${{ matrix.script }}
 
       - name: Upload platform binary
