@@ -1,3 +1,8 @@
+## 1.6.3
+
+- 修复 Godot 回调 JavaScript 脚本实例时的参数转换：先复制传入的 Variant 指针数组再调用 JS 方法，避免高频回调中出现不稳定的 native 崩溃。
+- 在 Gode 事件循环和 JavaScript 信号 Callable 中推进 V8 microtask，使 `await obj.to_signal(...)` 在运行时能可靠恢复。
+
 ## 1.6.2
 
 - 为从 Godot 对象属性返回的生成内置类型增加实时写回，使 `velocity.x`、`global_transform.origin` 这类成员赋值会更新所属属性。

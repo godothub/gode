@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <exception>
 
 using namespace godot;
 
@@ -335,6 +336,7 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
 	Napi::Object instance = js_instance.Value();
 	Napi::Env env = instance.Env();
 	std::string method_name = String(p_method).utf8().get_data();
@@ -357,9 +359,31 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 		args.push_back(jsvalue);
 	}
 
-	Napi::Value result = method.Call(instance, args);
-	r_error.error = GDEXTENSION_CALL_OK;
-	return napi_to_godot(result);
+	try {
+		Napi::Value result = method.Call(instance, args);
+		r_error.error = GDEXTENSION_CALL_OK;
+		r_error.argument = 0;
+		r_error.expected = 0;
+		return napi_to_godot(result);
+	} catch (const Napi::Error &e) {
+		UtilityFunctions::printerr("JS Exception in ", method_name.c_str(), ": ", e.Message().c_str());
+		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+		r_error.argument = 0;
+		r_error.expected = 0;
+		return Variant();
+	} catch (const std::exception &e) {
+		UtilityFunctions::printerr("Native exception in JS method ", method_name.c_str(), ": ", e.what());
+		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+		r_error.argument = 0;
+		r_error.expected = 0;
+		return Variant();
+	} catch (...) {
+		UtilityFunctions::printerr("Unknown exception in JS method ", method_name.c_str());
+		r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
+		r_error.argument = 0;
+		r_error.expected = 0;
+		return Variant();
+	}
 }
 
 void JavascriptInstance::notification_bind(Napi::Object instance, int32_t p_what, bool p_reversed) {

@@ -59,6 +59,7 @@ void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
     
 	if (func_ref.IsEmpty()) {
 		r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
@@ -76,6 +77,7 @@ void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount
 		Napi::Value result = func.Call(env.Global(), args);
 		r_return_value = napi_to_godot(result);
 		r_call_error.error = GDEXTENSION_CALL_OK;
+		NodeRuntime::isolate->PerformMicrotaskCheckpoint();
 	} catch (const Napi::Error &e) {
 		godot::UtilityFunctions::printerr("JS Exception in Callable: ", e.Message().c_str());
 		r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;

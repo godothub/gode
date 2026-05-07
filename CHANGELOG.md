@@ -1,3 +1,8 @@
+## 1.6.3
+
+- Fixed JavaScript script instance argument marshaling from Godot callbacks by copying the incoming Variant pointer array before calling JS methods, preventing unstable native crashes in high-frequency callbacks.
+- Advanced V8 microtasks from the Gode event loop and JavaScript signal callables so `await obj.to_signal(...)` resumes reliably during gameplay.
+
 ## 1.6.2
 
 - Added live write-back for generated built-in values returned from Godot object properties, so member assignments such as `velocity.x` and `global_transform.origin` update the owner property.

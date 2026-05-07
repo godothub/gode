@@ -3,6 +3,7 @@
 #include "support/javascript/javascript_instance.h"
 #include "support/javascript/javascript_language.h"
 #include <godot_cpp/core/memory.hpp>
+#include <vector>
 
 using namespace godot;
 
@@ -177,8 +178,13 @@ static void javascript_instance_call(GDExtensionScriptInstanceDataPtr p_self, GD
 	const StringName &method = *reinterpret_cast<const StringName *>(p_method);
 	const Variant *args = nullptr;
 	int32_t argc = 0;
+	std::vector<Variant> arg_storage;
 	if (p_args && p_argument_count > 0) {
-		args = *reinterpret_cast<const Variant *const *>(p_args);
+		arg_storage.reserve((size_t)p_argument_count);
+		for (GDExtensionInt i = 0; i < p_argument_count; i++) {
+			arg_storage.push_back(*reinterpret_cast<const Variant *>(p_args[i]));
+		}
+		args = arg_storage.data();
 		argc = (int32_t)p_argument_count;
 	}
 	GDExtensionCallError local_error;

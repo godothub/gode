@@ -1089,7 +1089,9 @@ void NodeRuntime::spin_loop() {
 	v8::Local<v8::Context> context = node_context.Get(isolate);
 	v8::Context::Scope context_scope(context);
 
+	isolate->PerformMicrotaskCheckpoint();
 	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+	isolate->PerformMicrotaskCheckpoint();
 }
 
 void NodeRuntime::shutdown() {
