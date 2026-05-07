@@ -316,33 +316,7 @@ Napi::Function Javascript::get_default_class() const {
 		return Napi::Function();
 	}
 
-	String path = get_path();
-	if (path.is_empty()) {
-		return Napi::Function();
-	}
-
-	String rel = path;
-	if (rel.begins_with("res://")) {
-		rel = rel.substr(6);
-	}
-	String js_path = "res://dist/" + rel.get_basename() + ".js";
-
-	if (!FileAccess::file_exists(js_path)) {
-		return Napi::Function();
-	}
-
-	String js_code = FileAccess::get_file_as_string(js_path);
-	
-	Napi::Value exports = NodeRuntime::compile_script(js_code.utf8().get_data(), js_path.utf8().get_data());
-	Napi::Function cls = NodeRuntime::get_default_class(exports);
-	
-
-	if (!cls.IsEmpty() && !cls.IsUndefined() && !cls.IsNull()) {
-		const_cast<Javascript*>(this)->default_class = Napi::Persistent(cls);
-		return cls;
-	}
-
-	return Napi::Function();
+	return default_class.IsEmpty() ? Napi::Function() : default_class.Value();
 }
 
 bool Javascript::_editor_can_reload_from_file() {
@@ -523,7 +497,7 @@ bool Javascript::_instance_has(Object *p_object) const {
 }
 
 bool Javascript::_has_source_code() const {
-	return source_code.is_empty();
+	return !source_code.is_empty();
 }
 
 String Javascript::_get_source_code() const {

@@ -959,6 +959,37 @@ bool Typescript::compile() const {
 	return true;
 }
 
+Napi::Function Typescript::get_default_class() const {
+	if (!default_class.IsEmpty()) {
+		return default_class.Value();
+	}
+
+	if (!compile()) {
+		return Napi::Function();
+	}
+
+	String path = get_path();
+	if (path.is_empty()) {
+		return Napi::Function();
+	}
+
+	String js_path = get_js_path(path);
+	if (!FileAccess::file_exists(js_path)) {
+		return Napi::Function();
+	}
+
+	String js_code = FileAccess::get_file_as_string(js_path);
+	Napi::Value exports = NodeRuntime::compile_script(js_code.utf8().get_data(), js_path.utf8().get_data());
+	Napi::Function cls = NodeRuntime::get_default_class(exports);
+
+	if (!cls.IsEmpty() && !cls.IsUndefined() && !cls.IsNull()) {
+		const_cast<Typescript *>(this)->default_class = Napi::Persistent(cls);
+		return cls;
+	}
+
+	return Napi::Function();
+}
+
 ScriptLanguage *Typescript::_get_language() const {
 	return TypescriptLanguage::get_singleton();
 }

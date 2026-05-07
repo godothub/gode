@@ -42,7 +42,7 @@ protected:
 
 public:
 	virtual bool compile() const;
-	Napi::Function get_default_class() const;
+	virtual Napi::Function get_default_class() const;
 	const godot::HashMap<godot::StringName, godot::PropertyInfo> &get_exported_properties() const { return properties; }
 	const godot::Vector<godot::PropertyInfo> &get_property_list_ordered() const { return property_list; }
 	const godot::HashMap<godot::StringName, godot::Variant> &get_property_defaults() const { return property_defaults; }

@@ -13,6 +13,7 @@ protected:
 
 public:
 	bool compile() const override;
+	Napi::Function get_default_class() const override;
 	godot::ScriptLanguage *_get_language() const override;
 };
 
