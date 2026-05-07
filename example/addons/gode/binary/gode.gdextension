@@ -3,6 +3,11 @@
 entry_symbol = "node_library_init"
 compatibility_minimum = "4.6.2"
 
+[icons]
+
+JavaScript = "res://addons/gode/icons/javascript.svg"
+TypeScript = "res://addons/gode/icons/typescript.svg"
+
 [libraries]
 
 windows.debug.x86_64 = "res://addons/gode/binary/windows/x64/libgode.dll"
