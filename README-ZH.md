@@ -134,20 +134,6 @@ export default class Hello extends Node {
 npx tsc --watch
 ```
 
-### 5. 运行示例项目
-
-仓库内的 `example` 是一个完整 Godot 项目，包含 JavaScript 脚本、插件目录和 `package.json`。可以直接用 Godot 打开：
-
-```bash
-godot --path example
-```
-
-示例脚本位于：
-
-- `example/scripts/main_menu.js`
-- `example/scripts/test_workspace.js`
-- `example/scripts/test_catalog.js`
-
 ## 进阶用法
 
 ### JavaScript 与 GDScript 互相调用
@@ -213,16 +199,16 @@ const result = target.call("some_method", "from JavaScript");
 可以从 `godot` 模块导入 Godot 类、内置 Variant 类型和运行时 singleton：
 
 ```js
-import { DisplayServer, Node, ResourceLoader, Vector3 } from "godot";
+import { DisplayServer, Node3D, ResourceLoader, Vector3 } from "godot";
 
-export default class Demo extends Node {
+export default class Demo extends Node3D {
 	_ready() {
 		console.log(DisplayServer.get_name());
 
-		const scene = ResourceLoader.load("res://menu/menu.tscn");
-		const menu = scene.instantiate();
-		menu.position = new Vector3(0, 0, 0);
-		this.add_child(menu);
+		const scene = ResourceLoader.load("res://scenes/marker.tscn");
+		const marker = scene.instantiate();
+		marker.position = new Vector3(0, 1, 0);
+		this.add_child(marker);
 	}
 }
 ```
@@ -363,18 +349,30 @@ if (target.has_method("hit")) {
 JavaScript 中加载的资源是普通 Godot 资源，在 JavaScript wrapper 持有期间会保持正确的 Godot 生命周期：
 
 ```js
-import { ResourceLoader } from "godot";
+import { Node, ResourceLoader } from "godot";
 
-const menu_scene = ResourceLoader.load("res://menu/menu.tscn");
-const menu = menu_scene.instantiate();
-this.add_child(menu);
+export default class SceneSpawner extends Node {
+	_ready() {
+		const menuScene = ResourceLoader.load("res://menu/menu.tscn");
+		const menu = menuScene.instantiate();
+		this.add_child(menu);
+	}
+}
 ```
+
+维护旧脚本时，也可以从 `globalThis` 读取 `ResourceLoader`。
 
 如果资源后续还会复用，像 GDScript 中一样保留引用即可：
 
 ```js
-this.level_scene = ResourceLoader.load("res://level/level.tscn");
-this.add_child(this.level_scene.instantiate());
+import { Node, ResourceLoader } from "godot";
+
+export default class LevelLoader extends Node {
+	_ready() {
+		this.levelScene = ResourceLoader.load("res://level/level.tscn");
+		this.add_child(this.levelScene.instantiate());
+	}
+}
 ```
 
 ### 调试
@@ -433,6 +431,10 @@ import { PlayerState } from "./player_state.js";
 Gode 会从项目根目录的 `node_modules` 中解析 npm 包。导出预设应包含运行时 JavaScript/JSON 文件、`dist`、`node_modules` 和 `package.json`。示例项目使用 `all_resources`，这是偏保守、优先保证导出后可运行的方式。
 
 依赖裁剪、打包、npm 原生插件处理、生产依赖安装等应放在项目自己的构建流程里。这样 Gode 可以兼容 npm、pnpm、yarn、bun 和自定义构建方式。
+
+## 案例展示
+
+- [Gode TPS Demo](https://github.com/godothub/gode-tps-demo)：官方3D案例的JavaScript版本
 
 ## 常见问题
 

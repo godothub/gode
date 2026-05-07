@@ -134,20 +134,6 @@ Run the compiler yourself while working:
 npx tsc --watch
 ```
 
-### 5. Run the Example Project
-
-The `example` directory in this repository is a complete Godot project with JavaScript scripts, the plugin directory, and `package.json`. Open it directly with Godot:
-
-```bash
-godot --path example
-```
-
-Example scripts:
-
-- `example/scripts/main_menu.js`
-- `example/scripts/test_workspace.js`
-- `example/scripts/test_catalog.js`
-
 ## Advanced Usage
 
 ### Calling Between JavaScript and GDScript
@@ -213,16 +199,16 @@ For loose coupling, prefer Godot signals. See [Declaring Signals](#declaring-sig
 Import Godot classes, built-in Variant types, and runtime singletons from the `godot` module:
 
 ```js
-import { DisplayServer, Node, ResourceLoader, Vector3 } from "godot";
+import { DisplayServer, Node3D, ResourceLoader, Vector3 } from "godot";
 
-export default class Demo extends Node {
+export default class Demo extends Node3D {
 	_ready() {
 		console.log(DisplayServer.get_name());
 
-		const scene = ResourceLoader.load("res://menu/menu.tscn");
-		const menu = scene.instantiate();
-		menu.position = new Vector3(0, 0, 0);
-		this.add_child(menu);
+		const scene = ResourceLoader.load("res://scenes/marker.tscn");
+		const marker = scene.instantiate();
+		marker.position = new Vector3(0, 1, 0);
+		this.add_child(marker);
 	}
 }
 ```
@@ -363,18 +349,30 @@ Supported `mode` values are `"authority"`, `"any_peer"`, and `"disabled"`. Suppo
 Resources loaded from JavaScript are normal Godot resources and keep their Godot lifetime while wrapped by JavaScript:
 
 ```js
-import { ResourceLoader } from "godot";
+import { Node, ResourceLoader } from "godot";
 
-const menu_scene = ResourceLoader.load("res://menu/menu.tscn");
-const menu = menu_scene.instantiate();
-this.add_child(menu);
+export default class SceneSpawner extends Node {
+	_ready() {
+		const menuScene = ResourceLoader.load("res://menu/menu.tscn");
+		const menu = menuScene.instantiate();
+		this.add_child(menu);
+	}
+}
 ```
+
+You can also read `ResourceLoader` from `globalThis` when maintaining older scripts.
 
 Keep a reference to resources that you plan to reuse, just as you would in GDScript:
 
 ```js
-this.level_scene = ResourceLoader.load("res://level/level.tscn");
-this.add_child(this.level_scene.instantiate());
+import { Node, ResourceLoader } from "godot";
+
+export default class LevelLoader extends Node {
+	_ready() {
+		this.levelScene = ResourceLoader.load("res://level/level.tscn");
+		this.add_child(this.levelScene.instantiate());
+	}
+}
 ```
 
 ### Debugging
@@ -433,6 +431,10 @@ Run `npm run dev` while editing, and run `npm run build` before exporting or com
 Gode resolves npm packages from the project root `node_modules`. Export presets should include runtime JavaScript/JSON files, `dist`, `node_modules`, and `package.json`. The example project uses `all_resources`, which is conservative and favors reliable exports.
 
 Dependency trimming, bundling, native npm addon handling, and production-only installs should stay in your project build pipeline. This keeps Gode compatible with npm, pnpm, yarn, bun, and custom build setups.
+
+## Showcase
+
+- [Gode TPS Demo](https://github.com/godothub/gode-tps-demo): JavaScript version of the official 3D demo
 
 ## FAQ
 
