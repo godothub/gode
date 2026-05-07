@@ -84,7 +84,7 @@ export default class Demo extends Node {
 }
 ```
 
-Gode 会从项目的 `res://node_modules` 中解析 npm 包。导出项目时，请确保需要的 `node_modules`、`package.json` 和脚本文件被包含在导出资源中。
+Gode 会从项目的 `res://node_modules` 中解析 npm 包。导出项目时，请选择包含 JavaScript/JSON 文件、`dist`、`node_modules` 和 `package.json` 的导出预设。示例项目使用 `all_resources`，它优先保证导出后可运行，而不是追求最小包体。
 
 ### 4. 使用 TypeScript
 
@@ -126,7 +126,7 @@ export default class Hello extends Node {
 }
 ```
 
-启用插件后，如果项目根目录存在 `tsconfig.json`，Gode 会尝试启动 TypeScript 监听编译。你也可以手动运行：
+请在项目中自行配置 TypeScript，并手动编译，例如：
 
 ```bash
 npx tsc --watch
@@ -152,14 +152,14 @@ godot --path example
 
 确认插件目录是 `res://addons/gode`，并且 `res://addons/gode/plugin.cfg` 存在。然后重新启用插件或重启 Godot。
 
-**TypeScript 没有自动编译**
+**TypeScript 脚本没有被编译**
 
-确认项目根目录存在 `tsconfig.json`，并且已安装 `typescript`。也可以先手动执行 `npx tsc --watch` 排查配置问题。
+Gode 只加载编译后的 JavaScript 输出。请确认项目根目录存在 `tsconfig.json`，已安装 `typescript`，并且你的构建/监听命令正在运行，例如 `npx tsc --watch`。
 
 **运行时找不到 npm 包**
 
-确认依赖安装在 Godot 项目根目录的 `node_modules` 中。导出项目时，也要把需要的包和 `package.json` 一起导出。
+确认依赖安装在 Godot 项目根目录的 `node_modules` 中，并且导出预设包含运行时 JavaScript 文件、`dist`、`node_modules` 和 `package.json`。npm 原生插件（`.node` 二进制）仍可能需要按具体包单独处理。
 
 **导出后插件无法加载**
 
-确认当前导出平台在支持列表中，并且 `addons/gode/binary/.gdextension` 中对应平台的二进制文件存在。
+确认当前导出平台在支持列表中，并且 `addons/gode/binary/gode.gdextension` 中对应平台的二进制文件存在。

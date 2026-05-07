@@ -84,7 +84,7 @@ export default class Demo extends Node {
 }
 ```
 
-Gode resolves npm packages from `res://node_modules`. When exporting your project, make sure the required `node_modules`, `package.json`, and script files are included in the exported resources.
+Gode resolves npm packages from `res://node_modules`. For exported projects, use a Godot export preset that includes runtime JavaScript/JSON files, `dist`, `node_modules`, and `package.json`. The example project uses `all_resources`, which favors reliable exports over smaller package size.
 
 ### 4. Use TypeScript
 
@@ -126,7 +126,7 @@ export default class Hello extends Node {
 }
 ```
 
-After enabling the plugin, if `tsconfig.json` exists in the project root, Gode will try to start TypeScript watch compilation. You can also run it manually:
+Configure TypeScript in your project and run the compiler yourself, for example:
 
 ```bash
 npx tsc --watch
@@ -152,13 +152,13 @@ Example scripts:
 
 Make sure the plugin directory is `res://addons/gode` and that `res://addons/gode/plugin.cfg` exists. Then enable the plugin again or restart Godot.
 
-**TypeScript does not compile automatically**
+**TypeScript scripts are not compiled**
 
-Make sure `tsconfig.json` exists in the project root and `typescript` is installed. You can also run `npx tsc --watch` manually to debug the configuration.
+Gode only loads the compiled JavaScript output. Make sure your project has a `tsconfig.json`, `typescript` is installed, and your own build/watch command is running, such as `npx tsc --watch`.
 
 **npm packages cannot be found at runtime**
 
-Make sure dependencies are installed in the Godot project root under `node_modules`. When exporting the project, include the required packages and `package.json`.
+Make sure dependencies are installed in the Godot project root under `node_modules`, and that your export preset includes the runtime JavaScript files, `dist`, `node_modules`, and `package.json`. Native npm addons (`.node` binaries) may still need package-specific handling.
 
 **The plugin fails to load after export**
 
