@@ -84,7 +84,7 @@ export default class Demo extends Node {
 }
 ```
 
-Gode resolves npm packages from `res://node_modules`. For exported projects, use a Godot export preset that includes runtime JavaScript/JSON files, `dist`, `node_modules`, and `package.json`. The example project uses `all_resources`, which favors reliable exports over smaller package size.
+Gode resolves npm packages from the project root `node_modules` (`res://node_modules`). Exported projects also need to include these runtime files; see [Exporting Projects](#exporting-projects).
 
 ### 4. Use TypeScript
 
@@ -128,7 +128,7 @@ export default class Hello extends Node {
 }
 ```
 
-Configure TypeScript in your project and run the compiler yourself, for example:
+Run the compiler yourself while working:
 
 ```bash
 npx tsc --watch
@@ -206,7 +206,118 @@ const target = this.get_node("../GdTarget");
 const result = target.call("some_method", "from JavaScript");
 ```
 
-For loose coupling, use Godot signals. JavaScript can connect to and emit Godot signals:
+For loose coupling, prefer Godot signals. See [Declaring Signals](#declaring-signals) for JavaScript-defined signals.
+
+### Godot Types and Singletons
+
+Import Godot classes, built-in Variant types, and runtime singletons from the `godot` module:
+
+```js
+import { DisplayServer, Node, ResourceLoader, Vector3 } from "godot";
+
+export default class Demo extends Node {
+	_ready() {
+		console.log(DisplayServer.get_name());
+
+		const scene = ResourceLoader.load("res://menu/menu.tscn");
+		const menu = scene.instantiate();
+		menu.position = new Vector3(0, 0, 0);
+		this.add_child(menu);
+	}
+}
+```
+
+For compatibility with older scripts, singletons are also available on `globalThis`:
+
+```js
+const scene = globalThis.ResourceLoader.load("res://level/level.tscn");
+```
+
+### JavaScript Autoloads
+
+JavaScript scripts can be used as Godot autoloads when the script's default export extends a Godot base class such as `Node`:
+
+```js
+import { Node } from "godot";
+
+export default class Settings extends Node {
+	_ready() {
+		this.load_settings();
+	}
+
+	load_settings() {
+		// Initialize global settings here.
+	}
+}
+```
+
+Register the script in `project.godot` or through Project Settings:
+
+```ini
+[autoload]
+
+Settings="*res://menu/settings.js"
+```
+
+Then access it from other scripts through the scene tree:
+
+```js
+const settings = this.get_node("/root/Settings");
+settings.load_settings();
+```
+
+### Exported Properties and Tool Scripts
+
+Use static `exports` to expose JavaScript fields as Godot script properties. Exported properties appear in the Inspector and can be serialized in scenes and resources.
+
+```js
+import { Node3D, Vector3 } from "godot";
+
+export default class Spawner extends Node3D {
+	static exports = {
+		spawn_count: { type: "int" },
+		spawn_offset: { type: "Vector3" },
+		enabled: { type: "bool" },
+	};
+
+	spawn_count = 3;
+	spawn_offset = new Vector3(0, 1, 0);
+	enabled = true;
+}
+```
+
+The `type` field uses Godot Variant type names such as `"String"`, `"int"`, `"float"`, `"bool"`, `"Vector3"`, `"Object"`, and other types supported by Godot script properties.
+
+Set `static tool = true` when the script should run in the editor:
+
+```js
+export default class Preview extends Node3D {
+	static tool = true;
+}
+```
+
+### Declaring Signals
+
+Declare custom script signals with a static `signals` object. Gode exposes these to Godot through the script metadata APIs, so `has_signal()`, `connect()`, and editor/runtime signal discovery work as expected.
+
+```js
+import { Node } from "godot";
+
+export default class Menu extends Node {
+	static signals = {
+		replace_main_scene: [{ name: "resource", type: "Object" }],
+		quit: [],
+	};
+
+	_on_start_pressed() {
+		this.emit_signal("replace_main_scene", this.next_scene);
+	}
+}
+```
+
+Signal arguments are described with `{ name, type }` entries. The `type` value may be a Godot Variant type name such as `"String"`, `"int"`, `"float"`, `"bool"`, `"Vector3"`, or `"Object"`.
+
+You can also connect to existing Godot signals directly:
 
 ```js
 button.connect("pressed", () => {
@@ -214,17 +325,108 @@ button.connect("pressed", () => {
 });
 ```
 
-### TypeScript Workflow
+### RPC Metadata
 
-Gode does not run the TypeScript compiler automatically. Keep your TypeScript build under your project control:
+Methods that should be callable through Godot multiplayer RPC must be declared with static `rpc_config` metadata:
 
-```bash
-npx tsc --watch
+```js
+import { CharacterBody3D } from "godot";
+
+export default class Robot extends CharacterBody3D {
+	static rpc_config = {
+		hit: { mode: "authority", call_local: true },
+		play_effect: { mode: "any_peer", call_local: true, transfer_mode: "reliable", channel: 0 },
+	};
+
+	hit() {
+		this.health -= 1;
+	}
+
+	play_effect() {
+		this.effect.restart();
+	}
+}
 ```
 
-TypeScript scripts should compile to matching JavaScript files under `res://dist`. For example, `res://scripts/player.ts` should produce `res://dist/scripts/player.js`.
+After the metadata is declared, regular Godot RPC calls can target the JavaScript method:
+
+```js
+if (target.has_method("hit")) {
+	target.rpc("hit");
+}
+```
+
+Supported `mode` values are `"authority"`, `"any_peer"`, and `"disabled"`. Supported `transfer_mode` values are `"reliable"`, `"unreliable"`, and `"unreliable_ordered"`. Omitted fields use Godot's defaults.
+
+### Resource Loading and Scene Instantiation
+
+Resources loaded from JavaScript are normal Godot resources and keep their Godot lifetime while wrapped by JavaScript:
+
+```js
+import { ResourceLoader } from "godot";
+
+const menu_scene = ResourceLoader.load("res://menu/menu.tscn");
+const menu = menu_scene.instantiate();
+this.add_child(menu);
+```
+
+Keep a reference to resources that you plan to reuse, just as you would in GDScript:
+
+```js
+this.level_scene = ResourceLoader.load("res://level/level.tscn");
+this.add_child(this.level_scene.instantiate());
+```
+
+### Debugging
 
 Use `console.log()` / `console.error()` for script-level debugging. Output appears in the Godot output panel and in the terminal that launched Godot.
+
+When a JavaScript exception crosses into Godot, Gode reports it as a Godot script error. For runtime-only issues, also run Godot from a terminal so Node/V8 warnings and native extension messages are visible.
+
+### TypeScript Workflow
+
+Gode only loads JavaScript at runtime, so treat TypeScript as a source language and attach the compiled JavaScript files in Godot scenes:
+
+```text
+res://scripts/player.ts        -> res://dist/scripts/player.js
+res://ui/main_menu.ts          -> res://dist/ui/main_menu.js
+res://systems/save_state.ts    -> res://dist/systems/save_state.js
+```
+
+Keep script metadata on the exported TypeScript class the same way you would in JavaScript. Static fields such as `signals`, `rpc_config`, `exports`, and `tool` are preserved in the compiled output:
+
+```ts
+import { Node } from "godot";
+
+export default class Player extends Node {
+	static signals = {
+		died: [],
+	};
+
+	static rpc_config = {
+		hit: { mode: "authority", call_local: true },
+	};
+}
+```
+
+For local imports in TypeScript source, prefer the runtime JavaScript extension so the emitted file can be loaded directly by Node/V8:
+
+```ts
+import { PlayerState } from "./player_state.js";
+```
+
+A common project setup is to keep watch/build commands in `package.json`:
+
+```json
+{
+	"scripts": {
+		"dev": "tsc --watch",
+		"build": "tsc --pretty false"
+	}
+}
+```
+
+Run `npm run dev` while editing, and run `npm run build` before exporting or committing generated `dist` files.
 
 ### Exporting Projects
 
@@ -238,9 +440,17 @@ Dependency trimming, bundling, native npm addon handling, and production-only in
 
 Make sure the plugin directory is `res://addons/gode` and that `res://addons/gode/plugin.cfg` exists. Then enable the plugin again or restart Godot.
 
+**A JavaScript autoload fails to instantiate**
+
+Make sure the autoload entry points to a `.js` file and the script's default export class extends a Godot base class such as `Node`. Gode uses that inheritance metadata to create the autoload instance.
+
 **TypeScript scripts are not compiled**
 
 Gode only loads the compiled JavaScript output. Make sure your project has a `tsconfig.json`, `typescript` is installed, and your own build/watch command is running, such as `npx tsc --watch`.
+
+**`rpc()` cannot call a JavaScript method**
+
+Declare the method in `static rpc_config` on the JavaScript class. Godot only exposes methods to RPC after the script reports that RPC metadata.
 
 **npm packages cannot be found at runtime**
 
