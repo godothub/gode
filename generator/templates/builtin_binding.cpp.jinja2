@@ -60,7 +60,7 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
     }
 
     {% for constructor in constructors %}
-    if (info.Length() == {{ constructor.arguments|length }}) {
+    if (info.Length() == {{ constructor.arguments|length }}{% for arg in constructor.arguments %} && ({{ arg.match_expr }}){% endfor %}) {
         instance = godot::{{ class_name }}(
         {% for arg in constructor.arguments %}
             gode::napi_to_godot<{{ arg.type_cpp }}>(info[{{ loop.index0 }}]){% if not loop.last %}, {% endif %}
@@ -76,8 +76,19 @@ void {{ class_name }}Binding::bind_owner_property(godot::Object *owner, const go
     owner_property = property;
 }
 
+void {{ class_name }}Binding::bind_parent_property(const Napi::Object &parent, const godot::StringName &property) {
+    parent_builtin.Reset(parent, 1);
+    parent_property = property;
+}
+
 void {{ class_name }}Binding::sync_owner_property() {
     if (owner_object_id == 0 || owner_property == godot::StringName()) {
+        if (!parent_builtin.IsEmpty() && parent_property != godot::StringName()) {
+            Napi::Object parent = parent_builtin.Value();
+            if (!parent.IsEmpty()) {
+                parent.Set(godot::String(parent_property).utf8().get_data(), gode::godot_to_napi(parent.Env(), instance));
+            }
+        }
         return;
     }
     godot::Object *owner = godot::ObjectDB::get_instance(owner_object_id);
@@ -189,10 +200,12 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
 {% for member in members %}
 Napi::Value {{ class_name }}Binding::{{ member.getter }}(const Napi::CallbackInfo& info) {
     {% if member.is_field %}
-    return gode::godot_to_napi(info.Env(), instance.{{ member.mapped_name }});
+    Napi::Value result = gode::godot_to_napi(info.Env(), instance.{{ member.mapped_name }});
     {% else %}
-    return gode::call_builtin_method(&godot::{{ class_name }}::{{ member.getter }}, &instance, info);
+    Napi::Value result = gode::call_builtin_method(&godot::{{ class_name }}::{{ member.getter }}, &instance, info);
     {% endif %}
+    gode::bind_builtin_parent_property(result, info.This().As<Napi::Object>(), godot::StringName("{{ member.name }}"));
+    return result;
 }
 
 void {{ class_name }}Binding::{{ member.setter }}(const Napi::CallbackInfo& info, const Napi::Value& value) {
@@ -215,11 +228,13 @@ Napi::Value {{ class_name }}Binding::operator_{{ op_group.name }}(const Napi::Ca
     if (info.Length() < 1) {
         {% for overload in op_group.overloads %}
         {% if overload.is_unary %}
-        {% if overload.return_type == class_name %}
-        godot::{{ class_name }} res = instance.operator {{ overload.cpp_op }}();
-        {% else %}
-        auto res = instance.operator {{ overload.cpp_op }}();
-        {% endif %}
+        godot::Variant res;
+        bool valid = false;
+        godot::Variant::evaluate(godot::Variant::{{ overload.variant_op }}, instance, godot::Variant(), res, valid);
+        if (!valid) {
+            Napi::Error::New(info.Env(), "Invalid operands for operator {{ op_group.name }}").ThrowAsJavaScriptException();
+            return info.Env().Null();
+        }
         return gode::godot_to_napi(info.Env(), res);
         {% endif %}
         {% endfor %}
@@ -235,28 +250,20 @@ Napi::Value {{ class_name }}Binding::operator_{{ op_group.name }}(const Napi::Ca
         bool match = false;
         Napi::Value arg = info[0];
         
-        {% if overload.arguments[0].type == 'float' or overload.arguments[0].type == 'int' %}
-        if (arg.IsNumber()) match = true;
-        {% elif overload.arguments[0].type == 'bool' %}
-        if (arg.IsBoolean()) match = true;
-        {% elif overload.arguments[0].type == 'String' or overload.arguments[0].type == 'StringName' %}
-        if (arg.IsString()) match = true;
-        {% else %}
-        // For Object types, check constructor
-        if (arg.IsObject()) {
-            Napi::Object obj = arg.As<Napi::Object>();
-            if (obj.InstanceOf({{ overload.arguments[0].type }}Binding::constructor.Value())) {
-                match = true;
-            }
-        }
-        {% endif %}
+        if ({{ overload.arguments[0].match_expr }}) match = true;
         
         if (match) {
              {% for arg in overload.arguments %}
              {{ arg.type_cpp }} {{ arg.name }} = gode::napi_to_godot<{{ arg.type_cpp }}>(info[0]);
              {% endfor %}
              
-             auto res = instance {{ overload.cpp_op }} {{ overload.arguments[0].name }};
+             godot::Variant res;
+             bool valid = false;
+             godot::Variant::evaluate(godot::Variant::{{ overload.variant_op }}, instance, {{ overload.arguments[0].name }}, res, valid);
+             if (!valid) {
+                 Napi::Error::New(info.Env(), "Invalid operands for operator {{ op_group.name }}").ThrowAsJavaScriptException();
+                 return info.Env().Null();
+             }
              return gode::godot_to_napi(info.Env(), res);
         }
     }

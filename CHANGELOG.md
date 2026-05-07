@@ -2,6 +2,10 @@
 
 - Added live write-back for generated built-in values returned from Godot object properties, so member assignments such as `velocity.x` and `global_transform.origin` update the owner property.
 - Fixed weak object wrapper cache reuse after JavaScript GC, preventing repeated calls such as `get_multiplayer()` from returning an invalid wrapper.
+- Resolved generated built-in constructor overloads by argument type instead of arity, including `Basis(Quaternion)` and `Transform3D(Quaternion, Vector3)` style flows.
+- Added nested built-in parent write-back so chained assignments such as `global_transform.basis.x = ...` propagate back to the owning property.
+- Evaluated generated built-in operators through Godot `Variant`, enabling cross-type operations declared by the API such as `Basis.multiply(Vector3)` and `Transform3D.multiply(Vector3)`.
+- Accepted `Quaternion` values where generated bindings expect `Basis`, matching common root-motion and transform construction paths.
 
 ## 1.6.1
 

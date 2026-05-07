@@ -130,6 +130,13 @@ godot::Object *unwrap_godot_object(const Napi::Object &obj) {
 		return;                                               \
 	}
 
+#define BIND_PARENT_TO_BUILTIN(BindingClass)                  \
+	if (obj.InstanceOf(BindingClass::constructor.Value())) {  \
+		BindingClass *binding = BindingClass::Unwrap(obj);    \
+		binding->bind_parent_property(parent, property);      \
+		return;                                               \
+	}
+
 void bind_builtin_owner_property(const Napi::Value &value, godot::Object *owner, const godot::StringName &property) {
 	if (!owner || property == godot::StringName() || !value.IsObject()) {
 		return;
@@ -154,6 +161,32 @@ void bind_builtin_owner_property(const Napi::Value &value, godot::Object *owner,
 	BIND_OWNER_TO_BUILTIN(ColorBinding)
 	BIND_OWNER_TO_BUILTIN(NodePathBinding)
 	BIND_OWNER_TO_BUILTIN(RIDBinding)
+}
+
+void bind_builtin_parent_property(const Napi::Value &value, const Napi::Object &parent, const godot::StringName &property) {
+	if (property == godot::StringName() || !value.IsObject()) {
+		return;
+	}
+	Napi::Object obj = value.As<Napi::Object>();
+
+	BIND_PARENT_TO_BUILTIN(Vector2Binding)
+	BIND_PARENT_TO_BUILTIN(Vector2iBinding)
+	BIND_PARENT_TO_BUILTIN(Rect2Binding)
+	BIND_PARENT_TO_BUILTIN(Rect2iBinding)
+	BIND_PARENT_TO_BUILTIN(Vector3Binding)
+	BIND_PARENT_TO_BUILTIN(Vector3iBinding)
+	BIND_PARENT_TO_BUILTIN(Transform2DBinding)
+	BIND_PARENT_TO_BUILTIN(Vector4Binding)
+	BIND_PARENT_TO_BUILTIN(Vector4iBinding)
+	BIND_PARENT_TO_BUILTIN(PlaneBinding)
+	BIND_PARENT_TO_BUILTIN(QuaternionBinding)
+	BIND_PARENT_TO_BUILTIN(AABBBinding)
+	BIND_PARENT_TO_BUILTIN(BasisBinding)
+	BIND_PARENT_TO_BUILTIN(Transform3DBinding)
+	BIND_PARENT_TO_BUILTIN(ProjectionBinding)
+	BIND_PARENT_TO_BUILTIN(ColorBinding)
+	BIND_PARENT_TO_BUILTIN(NodePathBinding)
+	BIND_PARENT_TO_BUILTIN(RIDBinding)
 }
 
 static ClassInfo *find_class_info_for_object(godot::Object *obj) {

@@ -25,6 +25,7 @@ void register_class(const std::string &name, const std::string &godot_class_name
 godot::Object *unwrap_godot_object(const Napi::Object &value);
 void register_godot_instance(godot::Object *obj, Napi::Object js_obj);
 void bind_builtin_owner_property(const Napi::Value &value, godot::Object *owner, const godot::StringName &property);
+void bind_builtin_parent_property(const Napi::Value &value, const Napi::Object &parent, const godot::StringName &property);
 
 // Helper to detect BitField
 template <typename T>
@@ -51,6 +52,12 @@ std::remove_const_t<std::remove_reference_t<T>> napi_to_godot(Napi::Value value)
 			return godot::String::utf8(value.ToString().Utf8Value().c_str());
 		}
 		return godot::String();
+	} else if constexpr (std::is_same_v<ClearType, godot::Basis>) {
+		godot::Variant variant = napi_to_godot(value);
+		if (variant.get_type() == godot::Variant::Type::QUATERNION) {
+			return godot::Basis(variant.operator godot::Quaternion());
+		}
+		return variant;
 	} else if constexpr (std::is_enum_v<ClearType>) {
 		return static_cast<ClearType>(value.ToNumber().Int64Value());
 	} else if constexpr (is_bitfield_v<ClearType>) {

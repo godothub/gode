@@ -15,10 +15,13 @@ public:
 	godot::{{ class_name }} instance;
     uint64_t owner_object_id = 0;
     godot::StringName owner_property;
+    Napi::ObjectReference parent_builtin;
+    godot::StringName parent_property;
     static Napi::FunctionReference constructor;
     static Napi::Object init(Napi::Env env, Napi::Object exports);
     {{ class_name }}Binding(const Napi::CallbackInfo& info);
     void bind_owner_property(godot::Object *owner, const godot::StringName &property);
+    void bind_parent_property(const Napi::Object &parent, const godot::StringName &property);
     void sync_owner_property();
     
     // Methods

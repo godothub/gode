@@ -28,6 +28,59 @@ BUILTIN_TYPES = {
     'PackedVector3Array', 'PackedColorArray', 'PackedVector4Array', 'RID',
 }
 
+def napi_match_expr(type_name, index):
+    value = f"info[{index}]"
+    if type_name in ('int', 'float'):
+        return f"{value}.IsNumber()"
+    if type_name == 'bool':
+        return f"{value}.IsBoolean()"
+    if type_name in ('String', 'StringName', 'NodePath'):
+        return (
+            f"{value}.IsString() || "
+            f"({value}.IsObject() && {value}.As<Napi::Object>().InstanceOf({type_name}Binding::constructor.Value()))"
+        )
+    if type_name == 'Basis':
+        return (
+            f"{value}.IsObject() && "
+            f"({value}.As<Napi::Object>().InstanceOf(BasisBinding::constructor.Value()) || "
+            f"{value}.As<Napi::Object>().InstanceOf(QuaternionBinding::constructor.Value()))"
+        )
+    if type_name == 'Variant':
+        return 'true'
+    if type_name in BUILTIN_TYPES:
+        return f"{value}.IsObject() && {value}.As<Napi::Object>().InstanceOf({type_name}Binding::constructor.Value())"
+    return f"{value}.IsObject()"
+
+
+def variant_operator_enum(op_symbol):
+    return {
+        '==': 'OP_EQUAL',
+        '!=': 'OP_NOT_EQUAL',
+        '<': 'OP_LESS',
+        '<=': 'OP_LESS_EQUAL',
+        '>': 'OP_GREATER',
+        '>=': 'OP_GREATER_EQUAL',
+        '+': 'OP_ADD',
+        '-': 'OP_SUBTRACT',
+        'unary-': 'OP_NEGATE',
+        'unary+': 'OP_POSITIVE',
+        '*': 'OP_MULTIPLY',
+        '/': 'OP_DIVIDE',
+        '%': 'OP_MODULE',
+        '**': 'OP_POWER',
+        '<<': 'OP_SHIFT_LEFT',
+        '>>': 'OP_SHIFT_RIGHT',
+        '&': 'OP_BIT_AND',
+        '|': 'OP_BIT_OR',
+        '^': 'OP_BIT_XOR',
+        '~': 'OP_BIT_NEGATE',
+        'and': 'OP_AND',
+        'or': 'OP_OR',
+        'xor': 'OP_XOR',
+        'not': 'OP_NOT',
+        'in': 'OP_IN',
+    }.get(op_symbol)
+
 
 def default_arg_napi_expr(arg, env_expr='info.Env()'):
     value = arg.get('default_value')
@@ -339,7 +392,8 @@ class BuiltinClassGenerator(CodeGenerator):
                          args.append({
                              'name': arg['name'],
                              'type': arg['type'],
-                             'type_cpp': self.get_cpp_type(arg['type'], '', refcounted_classes, True)
+                             'type_cpp': self.get_cpp_type(arg['type'], '', refcounted_classes, True),
+                             'match_expr': napi_match_expr(arg['type'], len(args)),
                          })
                     constructors.append({
                         'index': c['index'],
@@ -350,6 +404,13 @@ class BuiltinClassGenerator(CodeGenerator):
             operators = []
             operator_groups = {}
             dependencies = set()
+            for constructor in constructors:
+                for arg in constructor['arguments']:
+                    arg_type = arg['type']
+                    if arg_type in BUILTIN_TYPES and arg_type != class_name:
+                        dependencies.add(f"builtin/{to_snake_case(arg_type)}_binding.gen.h")
+                    if arg_type == 'Basis' and class_name != 'Quaternion':
+                        dependencies.add("builtin/quaternion_binding.gen.h")
             
             # Map operator symbols to readable names for JS methods
             op_symbol_to_name = {
@@ -384,9 +445,9 @@ class BuiltinClassGenerator(CodeGenerator):
                     
                     # Handle unary operators specifically
                     if is_unary:
-                        if op_symbol == '-':
+                        if op_symbol in ('-', 'unary-'):
                             op_name = 'negate'
-                        elif op_symbol == '+':
+                        elif op_symbol in ('+', 'unary+'):
                             op_name = 'positive'
                         elif op_symbol == 'not':
                             op_name = 'not'
@@ -403,27 +464,20 @@ class BuiltinClassGenerator(CodeGenerator):
                             op_name = 'operator_' + sanitize_method_name(op_symbol)
                     
                     # Skip 'in' operator for now if needed, or map it
-                    if op_symbol == 'in':
+                    variant_op = variant_operator_enum(op_symbol)
+                    if op_symbol == 'in' or not variant_op:
                         continue
 
                     args = []
                     if right_type:
-                        # Skip if right_type is different from left type (class_name)
-                        # UNLESS it is a primitive type (float, int, bool, String) or Variant
-                        primitive_types = ['float', 'int', 'bool', 'String', 'StringName', 'Object']
-                        if right_type != class_name and right_type not in primitive_types:
-                             continue
-
                         args.append({
                             'name': 'right',
                             'type': right_type,
-                            'type_cpp': self.get_cpp_type(right_type, '', refcounted_classes, True)
+                            'type_cpp': self.get_cpp_type(right_type, '', refcounted_classes, True),
+                            'match_expr': napi_match_expr(right_type, 0),
                         })
                         
-                        # Add dependency for right type
-                        # We need a mapping from type name to header file
-                        # This is usually 'builtin/{snake_case}_binding.gen.h'
-                        if right_type not in ['float', 'int', 'bool', 'String', 'StringName', 'Object']:
+                        if right_type in BUILTIN_TYPES and right_type != class_name:
                              dependencies.add(f"builtin/{to_snake_case(right_type)}_binding.gen.h")
                         elif right_type == 'Object':
                              dependencies.add(f"classes/object_binding.gen.h")
@@ -433,6 +487,8 @@ class BuiltinClassGenerator(CodeGenerator):
                     
                     # C++ operator is just the symbol
                     cpp_op = op_symbol
+                    if op_symbol == 'unary-': cpp_op = '-'
+                    if op_symbol == 'unary+': cpp_op = '+'
                     if op_symbol == 'not': cpp_op = '!';
                     if op_symbol == 'and': cpp_op = '&&';
                     if op_symbol == 'or': cpp_op = '||';
@@ -444,7 +500,8 @@ class BuiltinClassGenerator(CodeGenerator):
                         'return_type': return_type,
                         'return_type_cpp': self.get_cpp_type(return_type, '', refcounted_classes, False),
                         'arguments': args,
-                        'is_unary': is_unary
+                        'is_unary': is_unary,
+                        'variant_op': variant_op,
                     }
                     
                     if op_name not in operator_groups:
