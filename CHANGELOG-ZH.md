@@ -6,6 +6,7 @@
 - 增加嵌套内置类型父级写回，使 `global_transform.basis.x = ...` 这类链式赋值能继续回写到所属属性。
 - 通过 Godot `Variant` 执行生成的内置类型运算符，支持 API 声明的跨类型运算，例如 `Basis.multiply(Vector3)` 和 `Transform3D.multiply(Vector3)`。
 - 当生成绑定期望 `Basis` 时允许传入 `Quaternion`，对齐 root motion 和 transform 构造中常见的 Godot 用法。
+- 修正生成的 `Basis.x/y/z` 成员访问，改用 Godot 轴列而不是 godot-cpp 内部行存储，修复相机相对方向计算。
 
 ## 1.6.1
 

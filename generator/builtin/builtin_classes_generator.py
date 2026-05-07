@@ -123,7 +123,7 @@ DIRECT_FIELDS = {
     'Color': ['r', 'g', 'b', 'a'],
     'Plane': ['normal', 'd', 'x', 'y', 'z'],
     'AABB': ['position', 'size'],
-    'Basis': ['rows'], # Basis usually exposes rows[3]
+    'Basis': ['rows'],
     'Transform2D': ['columns'], # Transform2D exposes columns[3]
     'Transform3D': ['basis', 'origin'],
     'Projection': ['columns'],
@@ -132,9 +132,9 @@ DIRECT_FIELDS = {
 # Special mapping for members that are fields but need index access or name mapping
 FIELD_MAPPING = {
     'Basis': {
-        'x': 'rows[0]',
-        'y': 'rows[1]',
-        'z': 'rows[2]',
+        'x': {'get': 'get_column(0)', 'set': 'set_column(0, {value})'},
+        'y': {'get': 'get_column(1)', 'set': 'set_column(1, {value})'},
+        'z': {'get': 'get_column(2)', 'set': 'set_column(2, {value})'},
     },
     'Transform2D': {
         'x': 'columns[0]',
@@ -367,14 +367,25 @@ class BuiltinClassGenerator(CodeGenerator):
                         if member_name in DIRECT_FIELDS[class_name]:
                             is_field = True
                     
+                    get_expr = f"instance.{mapped_name}"
+                    set_expr = f"instance.{mapped_name} = {{value}}"
                     if class_name in FIELD_MAPPING:
                          if member_name in FIELD_MAPPING[class_name]:
                              is_field = True
                              mapped_name = FIELD_MAPPING[class_name][member_name]
+                             if isinstance(mapped_name, dict):
+                                 get_expr = f"instance.{mapped_name['get']}"
+                                 set_expr = f"instance.{mapped_name['set']}"
+                                 mapped_name = member_name
+                             else:
+                                 get_expr = f"instance.{mapped_name}"
+                                 set_expr = f"instance.{mapped_name} = {{value}}"
                     
                     member_data = {
                         'name': member_name,
                         'mapped_name': mapped_name,
+                        'get_expr': get_expr,
+                        'set_expr': set_expr,
                         'type': member['type'],
                         'type_cpp': self.get_cpp_type(member['type'], '', refcounted_classes, False),
                         'getter': f"get_{member_name}",

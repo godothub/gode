@@ -200,7 +200,7 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
 {% for member in members %}
 Napi::Value {{ class_name }}Binding::{{ member.getter }}(const Napi::CallbackInfo& info) {
     {% if member.is_field %}
-    Napi::Value result = gode::godot_to_napi(info.Env(), instance.{{ member.mapped_name }});
+    Napi::Value result = gode::godot_to_napi(info.Env(), {{ member.get_expr }});
     {% else %}
     Napi::Value result = gode::call_builtin_method(&godot::{{ class_name }}::{{ member.getter }}, &instance, info);
     {% endif %}
@@ -210,7 +210,7 @@ Napi::Value {{ class_name }}Binding::{{ member.getter }}(const Napi::CallbackInf
 
 void {{ class_name }}Binding::{{ member.setter }}(const Napi::CallbackInfo& info, const Napi::Value& value) {
     {% if member.is_field %}
-    instance.{{ member.mapped_name }} = gode::napi_to_godot<{{ member.type_cpp }}>(value);
+    {{ member.set_expr | replace('{value}', 'gode::napi_to_godot<' ~ member.type_cpp ~ '>(value)') }};
     {% else %}
     gode::call_builtin_method(&godot::{{ class_name }}::{{ member.setter }}, &instance, info, value);
     {% endif %}

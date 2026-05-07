@@ -6,6 +6,7 @@
 - Added nested built-in parent write-back so chained assignments such as `global_transform.basis.x = ...` propagate back to the owning property.
 - Evaluated generated built-in operators through Godot `Variant`, enabling cross-type operations declared by the API such as `Basis.multiply(Vector3)` and `Transform3D.multiply(Vector3)`.
 - Accepted `Quaternion` values where generated bindings expect `Basis`, matching common root-motion and transform construction paths.
+- Corrected generated `Basis.x/y/z` member access to use Godot axis columns instead of godot-cpp row storage, fixing camera-relative direction calculations.
 
 ## 1.6.1
 
