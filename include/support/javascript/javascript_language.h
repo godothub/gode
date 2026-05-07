@@ -14,7 +14,6 @@ public:
 
 private:
 	static JavascriptLanguage *singleton;
-	int32_t tsc_watch_pid = -1;
 
 protected:
 	static void _bind_methods();
