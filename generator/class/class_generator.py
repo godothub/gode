@@ -51,6 +51,16 @@ def default_arg_napi_expr(arg, env_expr='info.Env()'):
     return f"{env_expr}.Undefined()"
 
 
+def resolve_property_accessor(name, method_names):
+    if not name:
+        return None
+    if name in method_names:
+        return name
+    if name.startswith('_') and name[1:] in method_names:
+        return name[1:]
+    return None
+
+
 class ClassGenerator(CodeGenerator):
     def get_cpp_type(self, type_name, meta, refcounted_classes, is_arg=False):
         if type_name == 'void': return 'void'
@@ -286,6 +296,7 @@ class ClassGenerator(CodeGenerator):
 
             # Process Properties
             properties = []
+            method_names = {m['name'] for m in methods}
             for prop in class_def.get('properties', []):
                  prop_name = prop['name']
                  prop_type = prop['type']
@@ -296,22 +307,15 @@ class ClassGenerator(CodeGenerator):
                      
                  getter = prop.get('getter')
                  setter = prop.get('setter')
-                 
-                 # Verify getter/setter exist in methods
-                 has_getter = False
-                 has_setter = False
-                 
-                 for m in methods:
-                     if m['name'] == getter:
-                         has_getter = True
-                     if m['name'] == setter:
-                         has_setter = True
-                 
-                 if has_getter and has_setter:
+
+                 resolved_getter = resolve_property_accessor(getter, method_names)
+                 resolved_setter = resolve_property_accessor(setter, method_names)
+
+                 if resolved_getter:
                      properties.append({
                          'name': prop_name,
-                         'getter': sanitize_method_name(getter),
-                         'setter': sanitize_method_name(setter)
+                         'getter': sanitize_method_name(resolved_getter),
+                         'setter': sanitize_method_name(resolved_setter) if resolved_setter else None
                      })
 
             context = {

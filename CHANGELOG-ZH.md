@@ -1,3 +1,10 @@
+## 1.6.1
+
+- 将生成的内置类型静态方法暴露到构造器上，包括 `Basis.looking_at()` 这类 API。
+- 保留生成的内置类型方法绑定中的默认参数。
+- 生成类属性时，将 `_set_size` 这类下划线属性访问器解析到公开 setter。
+- 根据只有 getter 的 Godot API 元数据生成只读类属性，包括 `World3D.direct_space_state` 这类属性。
+
 ## 1.6.0
 
 - 将 Godot 类枚举值暴露到类构造器和 singleton 实例上，使运行时代码可以使用 `ResourceLoader.THREAD_LOAD_LOADED` 这类写法。

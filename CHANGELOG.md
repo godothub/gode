@@ -1,3 +1,10 @@
+## 1.6.1
+
+- Exposed generated built-in static methods on constructors, including APIs such as `Basis.looking_at()`.
+- Preserved default arguments for generated built-in method bindings.
+- Resolved underscored property accessors such as `_set_size` to public setters when generating class properties.
+- Generated read-only class properties from getter-only Godot API metadata, including properties such as `World3D.direct_space_state`.
+
 ## 1.6.0
 
 - Exposed Godot class enum values on class constructors and singleton instances, so runtime code can use expressions such as `ResourceLoader.THREAD_LOAD_LOADED`.

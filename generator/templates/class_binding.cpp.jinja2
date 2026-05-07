@@ -116,6 +116,15 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
         );
         prototype.DefineProperty(descriptor);
     }
+    {% elif prop.getter %}
+    {
+        Napi::PropertyDescriptor descriptor = Napi::PropertyDescriptor::Accessor(
+            "{{ prop.name }}",
+            &{{ class_name }}Binding::{{ prop.getter }},
+            napi_default
+        );
+        prototype.DefineProperty(descriptor);
+    }
     {% endif %}
     {% endfor %}
 

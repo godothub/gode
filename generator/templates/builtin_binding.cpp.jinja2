@@ -16,7 +16,11 @@ Napi::FunctionReference {{ class_name }}Binding::constructor;
 Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "{{ js_class_name }}", {
         {% for method in methods %}
+        {% if method.is_static %}
+        StaticMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name_cpp }}),
+        {% else %}
         InstanceMethod("{{ method.name }}", &{{ class_name }}Binding::{{ method.name_cpp }}),
+        {% endif %}
         {% endfor %}
         InstanceMethod("toString", &{{ class_name }}Binding::_to_string),
         InstanceMethod(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), &{{ class_name }}Binding::_to_string),
@@ -84,6 +88,13 @@ Napi::Value {{ class_name }}Binding::_iterator(const Napi::CallbackInfo& info) {
 
 {% for method in methods %}
 Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackInfo& info) {
+    {% if method.has_default_args %}
+    std::vector<Napi::Value> default_args = {
+        {% for default_arg in method.default_args %}
+        {{ default_arg }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    };
+    {% endif %}
     {% if method.is_static %}
         {% if method.is_vararg %}
             {% if method.return_type %}
@@ -94,15 +105,15 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
         {% else %}
             {% if method.return_type %}
                 {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), info{% if method.has_default_args %}, default_args{% endif %});
                 {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, info{% if method.has_default_args %}, default_args{% endif %});
                 {% endif %}
             {% else %}
                 {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), info{% if method.has_default_args %}, default_args{% endif %});
                 {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, info{% if method.has_default_args %}, default_args{% endif %});
                 {% endif %}
             {% endif %}
         {% endif %}
@@ -117,15 +128,15 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
             {% else %}
                 {% if method.return_type %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% else %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% endif %}
             {% endif %}
@@ -139,15 +150,15 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
             {% else %}
                 {% if method.return_type %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% else %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ class_name }}::{{ method.name_cpp }}), &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info);
+    return call_builtin_method(&godot::{{ class_name }}::{{ method.name_cpp }}, &instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% endif %}
             {% endif %}

@@ -18,7 +18,11 @@ public:
     
     // Methods
     {% for method in methods %}
+    {% if method.is_static %}
+    static Napi::Value {{ method.name_cpp }}(const Napi::CallbackInfo& info);
+    {% else %}
     Napi::Value {{ method.name_cpp }}(const Napi::CallbackInfo& info);
+    {% endif %}
     {% endfor %}
 
     // ToString

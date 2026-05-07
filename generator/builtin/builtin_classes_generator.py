@@ -18,6 +18,44 @@ def constant_cpp_value(constant):
     return value
 
 
+BUILTIN_TYPES = {
+    'String', 'StringName', 'NodePath', 'Vector2', 'Vector2i', 'Rect2', 'Rect2i',
+    'Vector3', 'Vector3i', 'Transform2D', 'Vector4', 'Vector4i', 'Plane',
+    'Quaternion', 'AABB', 'Basis', 'Transform3D', 'Projection', 'Color',
+    'Callable', 'Signal', 'Dictionary', 'Array', 'PackedByteArray',
+    'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array',
+    'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array',
+    'PackedVector3Array', 'PackedColorArray', 'PackedVector4Array', 'RID',
+}
+
+
+def default_arg_napi_expr(arg, env_expr='info.Env()'):
+    value = arg.get('default_value')
+    arg_type = arg.get('type')
+    if value is None:
+        return f"{env_expr}.Undefined()"
+    if isinstance(value, str) and value in ('true', 'false'):
+        return f"Napi::Boolean::New({env_expr}, {value})"
+    if arg_type in ('int', 'float') or isinstance(value, (int, float)):
+        return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+    if isinstance(value, str) and arg_type in BUILTIN_TYPES:
+        if value == '[]':
+            return f"gode::godot_to_napi({env_expr}, godot::{arg_type}())"
+        if value in ('null', 'nullptr'):
+            return f"{env_expr}.Null()"
+        cpp_value = value
+        if value.startswith(f"{arg_type}("):
+            cpp_value = value.replace(f"{arg_type}(", f"godot::{arg_type}(", 1).replace("inf", "INFINITY")
+        elif arg_type == 'RID' and value == 'RID()':
+            cpp_value = 'godot::RID()'
+        elif arg_type in ('String', 'StringName', 'NodePath') and value.startswith('"'):
+            cpp_value = f"godot::{arg_type}({value})"
+        return f"gode::godot_to_napi({env_expr}, {cpp_value})"
+    if isinstance(value, str) and value.startswith('"'):
+        return f"Napi::String::New({env_expr}, {value})"
+    return f"{env_expr}.Undefined()"
+
+
 # Map of classes and their direct fields (vs properties accessed via methods)
 DIRECT_FIELDS = {
     'Vector2': ['x', 'y'],
@@ -250,6 +288,13 @@ class BuiltinClassGenerator(CodeGenerator):
                     else:
                         method['has_return_value'] = False
                     vararg_methods.append(method)
+
+                method['default_args'] = []
+                method['has_default_args'] = False
+                for arg in method.get('arguments', []):
+                    if 'default_value' in arg:
+                        method['has_default_args'] = True
+                    method['default_args'].append(default_arg_napi_expr(arg))
             
             # Process members
             members = []
