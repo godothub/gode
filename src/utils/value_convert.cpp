@@ -1,10 +1,12 @@
 #include "utils/value_convert.h"
 
+#include <climits>
 #include <unordered_map>
 #include <vector>
 
 #include "godot_cpp/variant/utility_functions.hpp"
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/variant/builtin_types.hpp>
 
 #include "builtin/aabb_binding.gen.h"
@@ -91,8 +93,8 @@ static void remove_from_cache(Napi::Env env, void *data, uint64_t *hint) {
 	}
 }
 
-void register_class(const std::string &name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper) {
-	ClassInfo info = { ref, unwrapper, wrapper };
+void register_class(const std::string &name, const std::string &godot_class_name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper) {
+	ClassInfo info = { godot_class_name, ref, unwrapper, wrapper };
 	class_registry[name] = info;
 	class_list.push_back(info);
 }
@@ -119,6 +121,44 @@ godot::Object *unwrap_godot_object(const Napi::Object &obj) {
 		}
 	}
 	return nullptr;
+}
+
+static ClassInfo *find_class_info_for_object(godot::Object *obj) {
+	if (!obj) {
+		return nullptr;
+	}
+
+	const godot::StringName object_class = obj->get_class();
+	const std::string exact_name = godot::String(object_class).utf8().get_data();
+	auto exact = class_registry.find(exact_name);
+	if (exact != class_registry.end()) {
+		return &exact->second;
+	}
+
+	godot::ClassDBSingleton *class_db = godot::ClassDBSingleton::get_singleton();
+	ClassInfo *best = nullptr;
+	int best_distance = INT32_MAX;
+	for (ClassInfo &info : class_list) {
+		if (info.godot_class_name.empty()) {
+			continue;
+		}
+		const godot::StringName candidate(info.godot_class_name.c_str());
+		if (!class_db->is_parent_class(object_class, candidate)) {
+			continue;
+		}
+
+		int distance = 0;
+		godot::StringName current = object_class;
+		while (current != candidate && current != godot::StringName()) {
+			current = class_db->get_parent_class(current);
+			distance++;
+		}
+		if (distance < best_distance) {
+			best = &info;
+			best_distance = distance;
+		}
+	}
+	return best;
 }
 
 Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant) {
@@ -223,9 +263,9 @@ Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant) {
 				}
 			}
 
-			std::string class_name = obj->get_class().utf8().get_data();
-			if (class_registry.find(class_name) != class_registry.end()) {
-				ClassInfo &info = class_registry[class_name];
+			ClassInfo *class_info = find_class_info_for_object(obj);
+			if (class_info) {
+				ClassInfo &info = *class_info;
 				if (info.constructor && !info.constructor->IsEmpty()) {
 					Napi::Object js_obj = info.constructor->Value().New({});
 					if (info.wrapper) {

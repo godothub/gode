@@ -303,9 +303,17 @@ bool JavascriptInstance::has_method(const StringName &p_method) const {
 
 int32_t JavascriptInstance::get_method_argument_count(const StringName &p_method, bool &r_is_valid) const {
 	v8::Locker locker(NodeRuntime::isolate);
-	(void)p_method;
-	r_is_valid = false;
-	return 0;
+	if (!javascript.is_valid()) {
+		r_is_valid = false;
+		return 0;
+	}
+	javascript->compile();
+	if (!javascript->methods.has(p_method)) {
+		r_is_valid = false;
+		return 0;
+	}
+	r_is_valid = true;
+	return javascript->methods[p_method].arguments.size();
 }
 
 Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_args, int32_t p_argcount, GDExtensionCallError &r_error) {
@@ -484,8 +492,69 @@ void JavascriptInstance::free_property_list(const GDExtensionPropertyInfo *p_lis
 }
 
 void JavascriptInstance::get_method_list(const GDExtensionMethodInfo *&r_list, uint32_t &r_count) const {
-	(void)r_list;
-	r_count = 0;
+	method_list_cache.clear();
+	method_list_gde.clear();
+	method_arg_cache.clear();
+	method_arg_gde_cache.clear();
+	method_return_cache.clear();
+	method_return_gde_cache.clear();
+
+	if (javascript.is_valid()) {
+		javascript->compile();
+		const godot::HashMap<godot::StringName, godot::MethodInfo> &methods = javascript->methods;
+		method_list_cache.reserve(methods.size());
+		for (const godot::KeyValue<godot::StringName, godot::MethodInfo> &kv : methods) {
+			method_list_cache.push_back(kv.value);
+		}
+	}
+
+	method_list_gde.resize(method_list_cache.size());
+	method_arg_cache.resize(method_list_cache.size());
+	method_arg_gde_cache.resize(method_list_cache.size());
+	method_return_cache.resize(method_list_cache.size());
+	method_return_gde_cache.resize(method_list_cache.size());
+
+	for (size_t i = 0; i < method_list_cache.size(); i++) {
+		const godot::MethodInfo &mi = method_list_cache[i];
+		GDExtensionMethodInfo &gde = method_list_gde[i];
+
+		method_return_cache[i] = mi.return_val;
+		GDExtensionPropertyInfo &return_gde = method_return_gde_cache[i];
+		return_gde.type = (GDExtensionVariantType)method_return_cache[i].type;
+		return_gde.name = (GDExtensionStringNamePtr)&method_return_cache[i].name;
+		return_gde.class_name = (GDExtensionStringNamePtr)&method_return_cache[i].class_name;
+		return_gde.hint = (uint32_t)method_return_cache[i].hint;
+		return_gde.hint_string = (GDExtensionStringPtr)&method_return_cache[i].hint_string;
+		return_gde.usage = (uint32_t)method_return_cache[i].usage;
+		gde.name = (GDExtensionStringNamePtr)&mi.name;
+		gde.return_value = return_gde;
+		gde.flags = (uint32_t)mi.flags;
+		gde.id = mi.id;
+
+		method_arg_cache[i].reserve(mi.arguments.size());
+		for (const godot::PropertyInfo &arg : mi.arguments) {
+			method_arg_cache[i].push_back(arg);
+		}
+
+		method_arg_gde_cache[i].resize(method_arg_cache[i].size());
+		for (size_t j = 0; j < method_arg_cache[i].size(); j++) {
+			const godot::PropertyInfo &arg = method_arg_cache[i][j];
+			GDExtensionPropertyInfo &arg_gde = method_arg_gde_cache[i][j];
+			arg_gde.type = (GDExtensionVariantType)arg.type;
+			arg_gde.name = (GDExtensionStringNamePtr)&arg.name;
+			arg_gde.class_name = (GDExtensionStringNamePtr)&arg.class_name;
+			arg_gde.hint = (uint32_t)arg.hint;
+			arg_gde.hint_string = (GDExtensionStringPtr)&arg.hint_string;
+			arg_gde.usage = (uint32_t)arg.usage;
+		}
+		gde.arguments = method_arg_gde_cache[i].empty() ? nullptr : method_arg_gde_cache[i].data();
+		gde.argument_count = (uint32_t)method_arg_gde_cache[i].size();
+		gde.default_arguments = nullptr;
+		gde.default_argument_count = 0;
+	}
+
+	r_list = method_list_gde.empty() ? nullptr : method_list_gde.data();
+	r_count = (uint32_t)method_list_gde.size();
 }
 
 void JavascriptInstance::free_method_list(const GDExtensionMethodInfo *p_list) const {

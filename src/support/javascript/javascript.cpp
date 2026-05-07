@@ -104,6 +104,39 @@ static void parse_signal_entry(const std::string &p_signal_name, TSNode p_value,
 	r_signals[mi.name] = mi;
 }
 
+static void parse_method_params(TSNode p_method_node, const std::string &p_source, MethodInfo &r_method) {
+	TSNode params = ts_node_child_by_field_name(p_method_node, "parameters", strlen("parameters"));
+	if (ts_node_is_null(params)) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < ts_node_named_child_count(params); i++) {
+		TSNode param = ts_node_named_child(params, i);
+		const char *param_type = ts_node_type(param);
+		if (strcmp(param_type, "comment") == 0) {
+			continue;
+		}
+
+		TSNode name_node = param;
+		if (strcmp(param_type, "assignment_pattern") == 0 || strcmp(param_type, "rest_pattern") == 0) {
+			TSNode left = ts_node_child_by_field_name(param, "left", 4);
+			if (ts_node_is_null(left)) {
+				left = ts_node_named_child(param, 0);
+			}
+			if (!ts_node_is_null(left)) {
+				name_node = left;
+			}
+		}
+
+		PropertyInfo arg;
+		arg.type = Variant::NIL;
+		arg.usage = PROPERTY_USAGE_DEFAULT;
+		arg.hint = PROPERTY_HINT_NONE;
+		arg.name = StringName(node_text(p_source, name_node).c_str());
+		r_method.arguments.push_back(arg);
+	}
+}
+
 static int parse_rpc_mode(const std::string &p_mode) {
 	if (p_mode == "any_peer" || p_mode == "any") return 1;
 	if (p_mode == "authority" || p_mode == "master") return 2;
@@ -420,6 +453,7 @@ bool Javascript::compile() const {
 					if (is_static) {
 						mi.flags |= METHOD_FLAG_STATIC;
 					}
+					parse_method_params(member, source, mi);
 					methods[method_name] = mi;
 					member_lines[method_name] = ts_node_start_point(member).row + 1;
 				}
@@ -714,7 +748,10 @@ bool Javascript::_has_static_method(const StringName &p_method) const {
 
 Variant Javascript::_get_script_method_argument_count(const StringName &p_method) const {
 	compile();
-	return Variant();
+	if (!methods.has(p_method)) {
+		return Variant();
+	}
+	return methods[p_method].arguments.size();
 }
 
 Dictionary Javascript::_get_method_info(const StringName &p_method) const {
@@ -797,6 +834,35 @@ void Javascript::_update_exports() {
 TypedArray<Dictionary> Javascript::_get_script_method_list() const {
 	compile();
 	TypedArray<Dictionary> list;
+	for (const KeyValue<StringName, MethodInfo> &E : methods) {
+		Dictionary d;
+		d["name"] = String(E.key);
+		d["flags"] = (int)E.value.flags;
+		d["id"] = E.value.id;
+
+		Dictionary ret;
+		ret["name"] = String(E.value.return_val.name);
+		ret["type"] = (int)E.value.return_val.type;
+		ret["class_name"] = String(E.value.return_val.class_name);
+		ret["hint"] = (int)E.value.return_val.hint;
+		ret["hint_string"] = E.value.return_val.hint_string;
+		ret["usage"] = (int)E.value.return_val.usage;
+		d["return"] = ret;
+
+		Array args;
+		for (const PropertyInfo &arg : E.value.arguments) {
+			Dictionary ad;
+			ad["name"] = String(arg.name);
+			ad["type"] = (int)arg.type;
+			ad["class_name"] = String(arg.class_name);
+			ad["hint"] = (int)arg.hint;
+			ad["hint_string"] = arg.hint_string;
+			ad["usage"] = (int)arg.usage;
+			args.push_back(ad);
+		}
+		d["args"] = args;
+		list.push_back(d);
+	}
 	return list;
 }
 
@@ -825,6 +891,10 @@ int32_t Javascript::_get_member_line(const StringName &p_member) const {
 
 Dictionary Javascript::_get_constants() const {
 	Dictionary constants;
+	compile();
+	for (const KeyValue<StringName, Variant> &E : this->constants) {
+		constants[E.key] = E.value;
+	}
 	return constants;
 }
 

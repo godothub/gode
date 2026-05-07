@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/type_info.hpp>
 #include <godot_cpp/variant/builtin_types.hpp>
+#include <string>
 
 namespace gode {
 extern Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant);
@@ -14,12 +15,13 @@ typedef godot::Object *(*UnwrapFunc)(const Napi::Object &);
 typedef void (*WrapFunc)(const Napi::Object &, godot::Object *);
 
 struct ClassInfo {
+	std::string godot_class_name;
 	Napi::FunctionReference *constructor;
 	UnwrapFunc unwrapper;
 	WrapFunc wrapper;
 };
 
-void register_class(const std::string &name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper);
+void register_class(const std::string &name, const std::string &godot_class_name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper);
 godot::Object *unwrap_godot_object(const Napi::Object &value);
 void register_godot_instance(godot::Object *obj, Napi::Object js_obj);
 

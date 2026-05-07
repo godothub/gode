@@ -20,7 +20,7 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
         {% endfor %}
         InstanceMethod("toString", &{{ class_name }}Binding::_to_string),
         InstanceMethod(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), &{{ class_name }}Binding::_to_string),
-        {% if is_packed_array %}
+        {% if is_iterable_array %}
         InstanceMethod(Napi::Symbol::WellKnown(env, "iterator"), &{{ class_name }}Binding::_iterator),
         {% endif %}
         {% for member in members %}
@@ -71,7 +71,7 @@ Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) 
     return Napi::String::New(info.Env(), v.stringify().utf8().get_data());
 }
 
-{% if is_packed_array %}
+{% if is_iterable_array %}
 Napi::Value {{ class_name }}Binding::_iterator(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     Napi::Array values = Napi::Array::New(env, static_cast<uint32_t>(instance.size()));

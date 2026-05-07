@@ -23,7 +23,7 @@ public:
 
     // ToString
     Napi::Value _to_string(const Napi::CallbackInfo& info);
-    {% if is_packed_array %}
+    {% if is_iterable_array %}
     Napi::Value _iterator(const Napi::CallbackInfo& info);
     {% endif %}
 

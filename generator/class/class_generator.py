@@ -15,7 +15,7 @@ BUILTIN_TYPES = {
     'AABB', 'Basis', 'Transform3D', 'Projection', 'Callable', 'Signal', 'Dictionary', 'Array',
     'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array',
     'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array',
-    'PackedColorArray',
+    'PackedColorArray', 'PackedVector4Array', 'RID',
 }
 
 
@@ -31,6 +31,8 @@ def default_arg_napi_expr(arg, env_expr='info.Env()'):
         return f"Napi::Boolean::New({env_expr}, {value})"
     if arg_type in ('int', 'float') or isinstance(value, (int, float)):
         return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+    if isinstance(value, str) and arg_type and arg_type.startswith('typedarray::'):
+        return f"gode::godot_to_napi({env_expr}, godot::Array())"
     if isinstance(value, str) and arg_type in BUILTIN_TYPES:
         if value == '[]':
             return f"gode::godot_to_napi({env_expr}, godot::{arg_type}())"
@@ -39,6 +41,8 @@ def default_arg_napi_expr(arg, env_expr='info.Env()'):
         cpp_value = value
         if value.startswith(f"{arg_type}("):
             cpp_value = value.replace(f"{arg_type}(", f"godot::{arg_type}(", 1).replace("inf", "INFINITY")
+        elif arg_type == 'RID' and value == 'RID()':
+            cpp_value = 'godot::RID()'
         elif arg_type in ('String', 'StringName', 'NodePath') and value.startswith('"'):
             cpp_value = f"godot::{arg_type}({value})"
         return f"gode::godot_to_napi({env_expr}, {cpp_value})"
@@ -75,7 +79,7 @@ class ClassGenerator(CodeGenerator):
             return f"godot::BitField<godot::{type_name.replace('bitfield::', '').replace('.', '::')}>"
             
         # Builtins
-        builtins = ['String', 'StringName', 'NodePath', 'Variant', 'Vector2', 'Vector2i', 'Vector3', 'Vector3i', 'Vector4', 'Vector4i', 'Color', 'Rect2', 'Rect2i', 'Transform2D', 'Plane', 'Quaternion', 'AABB', 'Basis', 'Transform3D', 'Projection', 'Callable', 'Signal', 'Dictionary', 'Array', 'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array', 'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array', 'PackedColorArray']
+        builtins = ['String', 'StringName', 'NodePath', 'Variant', 'Vector2', 'Vector2i', 'Vector3', 'Vector3i', 'Vector4', 'Vector4i', 'Color', 'Rect2', 'Rect2i', 'Transform2D', 'Plane', 'Quaternion', 'AABB', 'Basis', 'Transform3D', 'Projection', 'Callable', 'Signal', 'Dictionary', 'Array', 'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array', 'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array', 'PackedColorArray', 'PackedVector4Array', 'RID']
         
         if type_name in builtins:
             if is_arg:

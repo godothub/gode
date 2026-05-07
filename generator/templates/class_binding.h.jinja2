@@ -13,6 +13,8 @@ class {{ class_name }}Binding : public Napi::ObjectWrap<{{ class_name }}Binding>
 public:
 	godot::{{ godot_class_name }} *instance;
     uint64_t internal_object_id = 0;
+    bool owns_instance = false;
+    bool referenced_instance = false;
     // Create Singleton
     static Napi::Object create_singleton(Napi::Env env, godot::{{ godot_class_name }}* instance);
 

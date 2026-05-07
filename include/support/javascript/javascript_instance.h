@@ -19,6 +19,12 @@ class JavascriptInstance {
 
 	mutable std::vector<godot::PropertyInfo> prop_list_cache;
 	mutable std::vector<GDExtensionPropertyInfo> prop_list_gde;
+	mutable std::vector<godot::MethodInfo> method_list_cache;
+	mutable std::vector<GDExtensionMethodInfo> method_list_gde;
+	mutable std::vector<std::vector<godot::PropertyInfo>> method_arg_cache;
+	mutable std::vector<std::vector<GDExtensionPropertyInfo>> method_arg_gde_cache;
+	mutable std::vector<godot::PropertyInfo> method_return_cache;
+	mutable std::vector<GDExtensionPropertyInfo> method_return_gde_cache;
 
 private:
 	void notification_bind(Napi::Object instance, int32_t p_what, bool p_reversed);

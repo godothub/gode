@@ -439,7 +439,7 @@ class BuiltinClassGenerator(CodeGenerator):
                 'constructors': constructors,
                 'has_destructor': builtin_class.get('has_destructor', False),
                 'indexing_return_type': builtin_class.get('indexing_return_type'),
-                'is_packed_array': class_name.startswith('Packed') and class_name.endswith('Array'),
+                'is_iterable_array': class_name == 'Array' or (class_name.startswith('Packed') and class_name.endswith('Array')),
                 'is_keyed': builtin_class.get('is_keyed', False),
                 'vararg_methods': vararg_methods,
                 'dependencies': sorted(list(dependencies)),

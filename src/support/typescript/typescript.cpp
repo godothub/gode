@@ -557,6 +557,49 @@ static void parse_signal_params(TSNode func_type_node, const std::string &source
 	}
 }
 
+static void parse_method_params(TSNode method_node, const std::string &source, MethodInfo &mi) {
+	TSNode params = ts_node_child_by_field_name(method_node, "parameters", strlen("parameters"));
+	if (ts_node_is_null(params)) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < ts_node_child_count(params); i++) {
+		TSNode param = ts_node_child(params, i);
+		const char *ptype = ts_node_type(param);
+		if (strcmp(ptype, "required_parameter") != 0 && strcmp(ptype, "optional_parameter") != 0) {
+			continue;
+		}
+
+		TSNode pattern = ts_node_child_by_field_name(param, "pattern", 7);
+		if (ts_node_is_null(pattern)) {
+			continue;
+		}
+
+		PropertyInfo arg_pi;
+		uint32_t pattern_start = ts_node_start_byte(pattern);
+		uint32_t pattern_end = ts_node_end_byte(pattern);
+		arg_pi.name = StringName(source.substr(pattern_start, pattern_end - pattern_start).c_str());
+		arg_pi.usage = PROPERTY_USAGE_DEFAULT;
+		arg_pi.hint = PROPERTY_HINT_NONE;
+		arg_pi.type = Variant::NIL;
+
+		for (uint32_t j = 0; j < ts_node_child_count(param); j++) {
+			TSNode child = ts_node_child(param, j);
+			if (strcmp(ts_node_type(child), "type_annotation") == 0) {
+				TSNode inner_type = ts_node_named_child(child, 0);
+				if (!ts_node_is_null(inner_type)) {
+					uint32_t type_start = ts_node_start_byte(inner_type);
+					uint32_t type_end = ts_node_end_byte(inner_type);
+					arg_pi.type = parse_type_string(source.substr(type_start, type_end - type_start));
+				}
+				break;
+			}
+		}
+
+		mi.arguments.push_back(arg_pi);
+	}
+}
+
 static void parse_class_members(TSNode class_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
 	TSNode body_node = ts_node_child_by_field_name(class_node, "body", 4);
 	if (ts_node_is_null(body_node)) {
@@ -781,6 +824,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 			if (is_static) {
 				mi.flags |= METHOD_FLAG_STATIC;
 			}
+			parse_method_params(member, source, mi);
 			methods[method_name] = mi;
 			member_lines[method_name] = ts_node_start_point(member).row + 1;
 		}

@@ -32,9 +32,12 @@ void {{ class_name }}Binding_wrap(const Napi::Object &obj, godot::Object *instan
     {{ class_name }}Binding *binding = {{ class_name }}Binding::Unwrap(obj);
     binding->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(instance);
     binding->internal_object_id = binding->instance ? binding->instance->get_instance_id() : 0;
+    binding->owns_instance = false;
+    binding->referenced_instance = false;
     godot::RefCounted *ref = godot::Object::cast_to<godot::RefCounted>(binding->instance);
     if (ref) {
         ref->reference();
+        binding->referenced_instance = true;
     }
 }
 
@@ -154,7 +157,7 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
     exports.Set("{{ js_class_name }}", func);
     {% endif %}
     
-    register_class("{{ js_class_name }}", &constructor, &{{ class_name }}Binding_unwrap, &{{ class_name }}Binding_wrap);
+    register_class("{{ js_class_name }}", "{{ godot_class_name }}", &constructor, &{{ class_name }}Binding_unwrap, &{{ class_name }}Binding_wrap);
     
     return exports;
 }
@@ -162,13 +165,17 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
 {{ class_name }}Binding::{{ class_name }}Binding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<{{ class_name }}Binding>(info) {
     if (info.Length() == 1 && info[0].IsExternal()) {
         instance = info[0].As<Napi::External<godot::{{ godot_class_name }}>>().Data();
+        owns_instance = false;
     } else if (info.Length() == 1 && info[0].IsObject()) {
         instance = Unwrap(info[0].As<Napi::Object>())->instance;
+        owns_instance = false;
     } else {
         {% if is_instantiable %}
         instance = memnew(godot::{{ godot_class_name }});
+        owns_instance = true;
         {% else %}
         instance = nullptr;
+        owns_instance = false;
         {% endif %}
     }
     
@@ -184,7 +191,7 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
         godot::Object* obj = godot::ObjectDB::get_instance(internal_object_id);
         if (obj) {
             godot::RefCounted* ref = godot::Object::cast_to<godot::RefCounted>(obj);
-            if (ref) {
+            if (ref && (owns_instance || referenced_instance)) {
                 ref->unreference();
                 if (ref->get_reference_count() == 0) {
             		godot::memdelete(ref);
@@ -197,7 +204,7 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
         godot::Object* obj = godot::ObjectDB::get_instance(internal_object_id);
         if (obj) {
             godot::Node* node = godot::Object::cast_to<godot::Node>(obj);
-            if (node && !node->is_inside_tree()) {
+            if (owns_instance && node && !node->is_inside_tree()) {
             	godot::memdelete(node);
             }
         }
