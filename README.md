@@ -97,6 +97,8 @@ TypeScript scripts are compiled to matching JavaScript files under `res://dist`.
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		"strict": true,
+		"rootDir": ".",
+		"outDir": "dist",
 		"baseUrl": ".",
 		"paths": {
 			"godot": ["addons/gode/types/godot.d.ts"]
@@ -150,40 +152,66 @@ Example scripts:
 
 ### Calling Between JavaScript and GDScript
 
-JavaScript scripts are Godot scripts. After a JavaScript script is attached to a node, GDScript can call its methods like any other script:
+Here is a complete node setup:
+
+```text
+Main
+├── JsPlayer      # attached to res://scripts/player_logic.js
+└── GdTarget      # attached to res://scripts/gd_target.gd
+```
+
+`res://scripts/player_logic.js`:
 
 ```js
 import { Node } from "godot";
 
 export default class PlayerLogic extends Node {
 	say_hello(name) {
-		console.log("hello", name);
 		return `hi ${name}`;
 	}
-}
-```
 
-```gdscript
-var result = $Player.say_hello("Godot")
-print(result)
-```
-
-JavaScript can also call methods on GDScript nodes once it has a node reference:
-
-```js
-export default class Caller extends Node {
-	_ready() {
-		const node = this.get_node("../SomeGDScriptNode");
-		const result = node.some_method("from JavaScript");
-		console.log(result);
+	call_gd_target() {
+		const target = this.get_node("../GdTarget");
+		return target.call("some_method", "from JavaScript");
 	}
 }
 ```
 
-For loose coupling, use Godot signals. JavaScript can emit signals and can also await Godot signals with `to_signal`:
+`res://scripts/gd_target.gd`:
+
+```gdscript
+extends Node
+
+func _ready() -> void:
+	var js_result = $"../JsPlayer".say_hello("Godot")
+	print(js_result) # hi Godot
+
+	var gd_result = $"../JsPlayer".call_gd_target()
+	print(gd_result) # gd received from JavaScript
+
+func some_method(message: String) -> String:
+	return "gd received " + message
+```
+
+GDScript can call JavaScript script methods directly, just like methods on regular node scripts:
+
+```gdscript
+var result = $"../JsPlayer".say_hello("Godot")
+```
+
+When JavaScript calls a GDScript method, use Godot's generic `call()`:
 
 ```js
-const value = await button.to_signal("pressed");
+const target = this.get_node("../GdTarget");
+const result = target.call("some_method", "from JavaScript");
+```
+
+For loose coupling, use Godot signals. JavaScript can connect to and emit Godot signals:
+
+```js
+button.connect("pressed", () => {
+	console.log("button pressed");
+});
 ```
 
 ### TypeScript Workflow
