@@ -61,6 +61,46 @@ bool _find_script_method_from_prototype_chain(const Napi::Object &p_instance, co
 	return false;
 }
 
+std::string _js_error_to_string(Napi::Value value) {
+	try {
+		if (value.IsObject()) {
+			Napi::Object obj = value.As<Napi::Object>();
+			if (obj.Has("stack")) {
+				Napi::Value stack = obj.Get("stack");
+				if (!stack.IsNull() && !stack.IsUndefined()) {
+					return stack.ToString().Utf8Value();
+				}
+			}
+			if (obj.Has("message")) {
+				Napi::Value message = obj.Get("message");
+				if (!message.IsNull() && !message.IsUndefined()) {
+					return message.ToString().Utf8Value();
+				}
+			}
+		}
+		if (!value.IsNull() && !value.IsUndefined()) {
+			return value.ToString().Utf8Value();
+		}
+	} catch (...) {
+	}
+	return "Unknown async JavaScript exception";
+}
+
+void _attach_promise_rejection_handler(Napi::Value value, const std::string &method_name) {
+	if (!value.IsPromise()) {
+		return;
+	}
+
+	Napi::Env env = value.Env();
+	Napi::Function on_rejected = Napi::Function::New(env, [method_name](const Napi::CallbackInfo &info) {
+		std::string message = info.Length() > 0 ? _js_error_to_string(info[0]) : "Unknown async JavaScript exception";
+		UtilityFunctions::printerr("Async JS Exception in ", method_name.c_str(), ": ", message.c_str());
+		return info.Env().Undefined();
+	}, "__gode_async_rejection_handler");
+
+	value.As<Napi::Promise>().Catch(on_rejected);
+}
+
 } // namespace
 JavascriptInstance::JavascriptInstance(const Ref<Javascript> &p_javascript, Object *p_owner, bool p_placeholder) :
 		javascript(p_javascript),
@@ -364,6 +404,10 @@ Variant JavascriptInstance::call(const StringName &p_method, const Variant *p_ar
 		r_error.error = GDEXTENSION_CALL_OK;
 		r_error.argument = 0;
 		r_error.expected = 0;
+		if (result.IsPromise()) {
+			_attach_promise_rejection_handler(result, method_name);
+			return Variant();
+		}
 		return napi_to_godot(result);
 	} catch (const Napi::Error &e) {
 		UtilityFunctions::printerr("JS Exception in ", method_name.c_str(), ": ", e.Message().c_str());
@@ -401,7 +445,16 @@ void JavascriptInstance::notification_bind(Napi::Object instance, int32_t p_what
 			}
 
 			Napi::Function method = method_val.As<Napi::Function>();
-			Napi::Value result = method.Call(instance, { Napi::Number::New(instance.Env(), p_what), Napi::Boolean::New(instance.Env(), p_reversed) });
+			try {
+				Napi::Value result = method.Call(instance, { Napi::Number::New(instance.Env(), p_what), Napi::Boolean::New(instance.Env(), p_reversed) });
+				_attach_promise_rejection_handler(result, notification_method_name);
+			} catch (const Napi::Error &e) {
+				UtilityFunctions::printerr("JS Exception in ", notification_method_name.c_str(), ": ", e.Message().c_str());
+			} catch (const std::exception &e) {
+				UtilityFunctions::printerr("Native exception in JS notification: ", e.what());
+			} catch (...) {
+				UtilityFunctions::printerr("Unknown exception in JS notification");
+			}
 
 			if (p_reversed) {
 				notification_bind(proto, p_what, p_reversed);

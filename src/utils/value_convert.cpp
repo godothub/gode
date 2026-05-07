@@ -6,6 +6,7 @@
 
 #include "godot_cpp/variant/utility_functions.hpp"
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/variant/builtin_types.hpp>
 
@@ -63,6 +64,9 @@ static std::unordered_map<std::string, ClassInfo> class_registry;
 static std::vector<ClassInfo> class_list;
 static std::unordered_map<uint64_t, Napi::ObjectReference> object_cache;
 
+constexpr const char *GODOT_OBJECT_ID_SYMBOL = "__gode.godot_object_id__";
+constexpr const char *GODOT_OBJECT_PTR_SYMBOL = "__gode.godot_object_ptr__";
+
 static godot::Dictionary object_to_dictionary(const Napi::Object &obj) {
 	godot::Dictionary dict;
 	Napi::Array property_names = obj.GetPropertyNames();
@@ -86,13 +90,6 @@ static godot::Array js_array_to_godot_array(const Napi::Array &js_array) {
 	return array;
 }
 
-static void remove_from_cache(Napi::Env env, void *data, uint64_t *hint) {
-	if (hint) {
-		object_cache.erase(*hint);
-		delete hint;
-	}
-}
-
 void register_class(const std::string &name, const std::string &godot_class_name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper) {
 	ClassInfo info = { godot_class_name, ref, unwrapper, wrapper };
 	class_registry[name] = info;
@@ -103,15 +100,42 @@ void register_godot_instance(godot::Object *obj, Napi::Object js_obj) {
 	if (!obj) {
 		return;
 	}
+	Napi::Env env = js_obj.Env();
 	uint64_t id = obj->get_instance_id();
-	Napi::ObjectReference ref = Napi::Weak(js_obj);
-	object_cache[id] = std::move(ref);
-
-	uint64_t *hint = new uint64_t(id);
-	js_obj.AddFinalizer(remove_from_cache, (void *)nullptr, hint);
+	js_obj.Set(Napi::Symbol::For(env, GODOT_OBJECT_ID_SYMBOL), Napi::BigInt::New(env, id));
+	js_obj.Set(Napi::Symbol::For(env, GODOT_OBJECT_PTR_SYMBOL), Napi::External<godot::Object>::New(env, obj));
+	object_cache[id] = Napi::Persistent(js_obj);
 }
 
 godot::Object *unwrap_godot_object(const Napi::Object &obj) {
+	Napi::Env env = obj.Env();
+	Napi::Symbol id_symbol = Napi::Symbol::For(env, GODOT_OBJECT_ID_SYMBOL);
+	if (obj.Has(id_symbol)) {
+		Napi::Value id_value = obj.Get(id_symbol);
+		uint64_t id = 0;
+		bool lossless = true;
+		if (id_value.IsBigInt()) {
+			id = id_value.As<Napi::BigInt>().Uint64Value(&lossless);
+		} else if (id_value.IsNumber()) {
+			id = static_cast<uint64_t>(id_value.As<Napi::Number>().Int64Value());
+		}
+		if (id != 0) {
+			godot::Object *stored = godot::ObjectDB::get_instance(id);
+			if (stored) {
+				return stored;
+			}
+			return nullptr;
+		}
+	}
+
+	Napi::Symbol ptr_symbol = Napi::Symbol::For(env, GODOT_OBJECT_PTR_SYMBOL);
+	if (obj.Has(ptr_symbol)) {
+		Napi::Value ptr_value = obj.Get(ptr_symbol);
+		if (ptr_value.IsExternal()) {
+			return ptr_value.As<Napi::External<godot::Object>>().Data();
+		}
+	}
+
 	for (const auto &info : class_list) {
 		if (!info.constructor || info.constructor->IsEmpty()) {
 			continue;
@@ -324,7 +348,7 @@ Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant) {
 			uint64_t id = obj->get_instance_id();
 			auto it = object_cache.find(id);
 			if (it != object_cache.end()) {
-				if (!it->second.IsEmpty()) {
+				if (godot::ObjectDB::get_instance(id) && !it->second.IsEmpty()) {
 					Napi::Object cached = it->second.Value();
 					if (!cached.IsEmpty()) {
 						return cached;

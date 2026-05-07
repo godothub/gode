@@ -2,6 +2,9 @@
 
 - 修复 Godot 回调 JavaScript 脚本实例时的参数转换：先复制传入的 Variant 指针数组再调用 JS 方法，避免高频回调中出现不稳定的 native 崩溃。
 - 在 Gode 事件循环和 JavaScript 信号 Callable 中推进 V8 microtask，使 `await obj.to_signal(...)` 在运行时能可靠恢复。
+- 修复生成类继承方法在子类 wrapper 上的派发：先通过共享 Godot 对象句柄取回真实对象再转换类型，避免 `SceneMultiplayer` 调用继承的 `MultiplayerAPI` 方法这类崩溃。
+- 调整 Godot 对象 wrapper 缓存，在保留 JavaScript 脚本实例身份的同时，不再依赖可能在 V8 GC finalizer 阶段崩溃的弱引用缓存。
+- 为 JavaScript 脚本方法和 notification 增加异步 Promise rejection 处理，使 `await` 之后发生的错误会打印到 Godot 日志，而不是作为 Node 未处理 rejection 终止游戏进程。
 
 ## 1.6.2
 

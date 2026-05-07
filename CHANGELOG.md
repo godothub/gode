@@ -2,6 +2,9 @@
 
 - Fixed JavaScript script instance argument marshaling from Godot callbacks by copying the incoming Variant pointer array before calling JS methods, preventing unstable native crashes in high-frequency callbacks.
 - Advanced V8 microtasks from the Gode event loop and JavaScript signal callables so `await obj.to_signal(...)` resumes reliably during gameplay.
+- Fixed generated inherited class method dispatch on subclass wrappers by resolving the shared Godot object handle before casting, preventing crashes such as `SceneMultiplayer` calling inherited `MultiplayerAPI` methods.
+- Reworked Godot object wrapper caching to preserve JavaScript script instance identity without relying on weak-reference finalizers that could crash during V8 garbage collection.
+- Added async Promise rejection handling for JavaScript script methods and notifications, so errors after `await` are reported to Godot instead of terminating the game process as unhandled Node rejections.
 
 ## 1.6.2
 
