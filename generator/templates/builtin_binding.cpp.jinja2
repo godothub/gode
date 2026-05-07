@@ -2,6 +2,7 @@
 #include "utils/func_utils.h"
 #include "utils/value_convert.h"
 #include <cmath>
+#include <godot_cpp/core/object.hpp>
 {% if vararg_header_include %}
 #include "{{ vararg_header_include }}"
 {% endif %}
@@ -68,6 +69,24 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
         return;
     }
     {% endfor %}
+}
+
+void {{ class_name }}Binding::bind_owner_property(godot::Object *owner, const godot::StringName &property) {
+    owner_object_id = owner ? owner->get_instance_id() : 0;
+    owner_property = property;
+}
+
+void {{ class_name }}Binding::sync_owner_property() {
+    if (owner_object_id == 0 || owner_property == godot::StringName()) {
+        return;
+    }
+    godot::Object *owner = godot::ObjectDB::get_instance(owner_object_id);
+    if (!owner) {
+        owner_object_id = 0;
+        owner_property = godot::StringName();
+        return;
+    }
+    owner->set(owner_property, instance);
 }
 
 Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) {
@@ -182,6 +201,7 @@ void {{ class_name }}Binding::{{ member.setter }}(const Napi::CallbackInfo& info
     {% else %}
     gode::call_builtin_method(&godot::{{ class_name }}::{{ member.setter }}, &instance, info, value);
     {% endif %}
+    sync_owner_property();
 }
 {% endfor %}
 

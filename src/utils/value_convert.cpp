@@ -123,6 +123,39 @@ godot::Object *unwrap_godot_object(const Napi::Object &obj) {
 	return nullptr;
 }
 
+#define BIND_OWNER_TO_BUILTIN(BindingClass)                   \
+	if (obj.InstanceOf(BindingClass::constructor.Value())) {  \
+		BindingClass *binding = BindingClass::Unwrap(obj);    \
+		binding->bind_owner_property(owner, property);        \
+		return;                                               \
+	}
+
+void bind_builtin_owner_property(const Napi::Value &value, godot::Object *owner, const godot::StringName &property) {
+	if (!owner || property == godot::StringName() || !value.IsObject()) {
+		return;
+	}
+	Napi::Object obj = value.As<Napi::Object>();
+
+	BIND_OWNER_TO_BUILTIN(Vector2Binding)
+	BIND_OWNER_TO_BUILTIN(Vector2iBinding)
+	BIND_OWNER_TO_BUILTIN(Rect2Binding)
+	BIND_OWNER_TO_BUILTIN(Rect2iBinding)
+	BIND_OWNER_TO_BUILTIN(Vector3Binding)
+	BIND_OWNER_TO_BUILTIN(Vector3iBinding)
+	BIND_OWNER_TO_BUILTIN(Transform2DBinding)
+	BIND_OWNER_TO_BUILTIN(Vector4Binding)
+	BIND_OWNER_TO_BUILTIN(Vector4iBinding)
+	BIND_OWNER_TO_BUILTIN(PlaneBinding)
+	BIND_OWNER_TO_BUILTIN(QuaternionBinding)
+	BIND_OWNER_TO_BUILTIN(AABBBinding)
+	BIND_OWNER_TO_BUILTIN(BasisBinding)
+	BIND_OWNER_TO_BUILTIN(Transform3DBinding)
+	BIND_OWNER_TO_BUILTIN(ProjectionBinding)
+	BIND_OWNER_TO_BUILTIN(ColorBinding)
+	BIND_OWNER_TO_BUILTIN(NodePathBinding)
+	BIND_OWNER_TO_BUILTIN(RIDBinding)
+}
+
 static ClassInfo *find_class_info_for_object(godot::Object *obj) {
 	if (!obj) {
 		return nullptr;
@@ -259,8 +292,12 @@ Napi::Value godot_to_napi(Napi::Env env, godot::Variant variant) {
 			auto it = object_cache.find(id);
 			if (it != object_cache.end()) {
 				if (!it->second.IsEmpty()) {
-					return it->second.Value();
+					Napi::Object cached = it->second.Value();
+					if (!cached.IsEmpty()) {
+						return cached;
+					}
 				}
+				object_cache.erase(it);
 			}
 
 			ClassInfo *class_info = find_class_info_for_object(obj);

@@ -1,3 +1,8 @@
+## 1.6.2
+
+- 为从 Godot 对象属性返回的生成内置类型增加实时写回，使 `velocity.x`、`global_transform.origin` 这类成员赋值会更新所属属性。
+- 修复 JavaScript GC 后弱对象包装缓存被复用的问题，避免 `get_multiplayer()` 等重复调用返回失效 wrapper。
+
 ## 1.6.1
 
 - 将生成的内置类型静态方法暴露到构造器上，包括 `Basis.looking_at()` 这类 API。

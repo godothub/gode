@@ -1,3 +1,8 @@
+## 1.6.2
+
+- Added live write-back for generated built-in values returned from Godot object properties, so member assignments such as `velocity.x` and `global_transform.origin` update the owner property.
+- Fixed weak object wrapper cache reuse after JavaScript GC, preventing repeated calls such as `get_multiplayer()` from returning an invalid wrapper.
+
 ## 1.6.1
 
 - Exposed generated built-in static methods on constructors, including APIs such as `Basis.looking_at()`.

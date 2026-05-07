@@ -280,6 +280,15 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
         {% endfor %}
     };
     {% endif %}
+    {% if method.live_property_name and not method.is_static and not method.is_vararg %}
+        {% if method.cast_signature %}
+    Napi::Value result = call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info{% if method.has_default_args %}, default_args{% endif %});
+        {% else %}
+    Napi::Value result = call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info{% if method.has_default_args %}, default_args{% endif %});
+        {% endif %}
+    gode::bind_builtin_owner_property(result, instance, godot::StringName("{{ method.live_property_name }}"));
+    return result;
+    {% else %}
         {% if method.is_static %}
         {% if method.is_vararg %}
             {% if method.return_type %}
@@ -332,6 +341,7 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
                 {% endif %}
             {% endif %}
         {% endif %}
+    {% endif %}
     {% endif %}
 }
 {% endfor %}

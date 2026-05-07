@@ -2,6 +2,7 @@
 #define GODE_{{ class_name|upper }}_BINDING_GEN_H
 
 #include <godot_cpp/variant/builtin_types.hpp>
+#include <godot_cpp/classes/object.hpp>
 #include <napi.h>
 
 namespace gode {
@@ -12,9 +13,13 @@ class {{ class_name }}Binding : public Napi::ObjectWrap<{{ class_name }}Binding>
 
 public:
 	godot::{{ class_name }} instance;
+    uint64_t owner_object_id = 0;
+    godot::StringName owner_property;
     static Napi::FunctionReference constructor;
     static Napi::Object init(Napi::Env env, Napi::Object exports);
     {{ class_name }}Binding(const Napi::CallbackInfo& info);
+    void bind_owner_property(godot::Object *owner, const godot::StringName &property);
+    void sync_owner_property();
     
     // Methods
     {% for method in methods %}

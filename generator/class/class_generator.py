@@ -296,6 +296,7 @@ class ClassGenerator(CodeGenerator):
 
             # Process Properties
             properties = []
+            live_property_getters = {}
             method_names = {m['name'] for m in methods}
             for prop in class_def.get('properties', []):
                  prop_name = prop['name']
@@ -314,9 +315,15 @@ class ClassGenerator(CodeGenerator):
                  if resolved_getter:
                      properties.append({
                          'name': prop_name,
+                         'type': prop_type,
                          'getter': sanitize_method_name(resolved_getter),
                          'setter': sanitize_method_name(resolved_setter) if resolved_setter else None
                      })
+                     if resolved_setter and prop_type in BUILTIN_TYPES:
+                         live_property_getters[sanitize_method_name(resolved_getter)] = prop_name
+
+            for method in methods:
+                method['live_property_name'] = live_property_getters.get(method['name_cpp'])
 
             context = {
                 'js_class_name': js_class_name,

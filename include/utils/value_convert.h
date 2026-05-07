@@ -24,6 +24,7 @@ struct ClassInfo {
 void register_class(const std::string &name, const std::string &godot_class_name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper);
 godot::Object *unwrap_godot_object(const Napi::Object &value);
 void register_godot_instance(godot::Object *obj, Napi::Object js_obj);
+void bind_builtin_owner_property(const Napi::Value &value, godot::Object *owner, const godot::StringName &property);
 
 // Helper to detect BitField
 template <typename T>
