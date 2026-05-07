@@ -21,5 +21,5 @@ example/addons/gode/types/
 
 # Example addon binaries: keep the Godot extension manifest, ignore built libraries.
 example/addons/gode/binary/*
-!example/addons/gode/binary/.gdextension
-!example/addons/gode/binary/.gdextension.uid
+!example/addons/gode/binary/gode.gdextension
+!example/addons/gode/binary/gode.gdextension.uid
