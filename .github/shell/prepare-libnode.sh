@@ -69,7 +69,7 @@ fi
 
 mkdir -p "$build_deps_dir"
 
-printf 'Downloading libnode...\n  %s\n' "$url"
+printf 'Downloading libnode...\n'
 curl --fail --location --show-error "$url" --output "$archive_path"
 
 rm -rf "$extract_dir"

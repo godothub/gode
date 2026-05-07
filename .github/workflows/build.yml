@@ -3,13 +3,22 @@ name: Build
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      libnode_url:
+        description: Download URL for libnode.zip
+        required: false
+        type: string
   workflow_call:
+    inputs:
+      libnode_url:
+        description: Download URL for libnode.zip
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 env:
-  LIBNODE_URL: https://github.com/moluopro/libnode/releases/download/24.15.0/libnode.zip
   PYTHON_VERSION: "3.14"
 
 jobs:
@@ -60,11 +69,22 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r generator/requirements.txt
 
+      - name: Mask libnode URL
+        shell: bash
+        env:
+          LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
+        run: |
+          if [ -n "$LIBNODE_URL" ]; then
+            echo "::add-mask::$LIBNODE_URL"
+          fi
+
       - name: Prepare libnode
         shell: bash
+        env:
+          LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
         run: >
           ./.github/shell/prepare-libnode.sh
-          --url "${{ env.LIBNODE_URL }}"
+          --url "$LIBNODE_URL"
 
       - name: Build Windows
         if: matrix.platform == 'windows'

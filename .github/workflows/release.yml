@@ -6,6 +6,10 @@ on:
       tag:
         description: Release tag to create or update
         required: true
+      libnode_url:
+        description: Download URL for libnode.zip
+        required: false
+        type: string
       prerelease:
         description: Mark the release as a prerelease
         required: true
@@ -22,6 +26,9 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    with:
+      libnode_url: ${{ inputs.libnode_url }}
+    secrets: inherit
 
   publish:
     name: Publish GitHub release
