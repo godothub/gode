@@ -8,15 +8,17 @@ const LANGUAGE_ICONS := {
 }
 
 var _previous_icons := {}
+var _icon_registration_pending := false
+var _icons_registered := false
 
 func _enter_tree() -> void:
-	_register_language_icons()
+	_queue_register_language_icons()
 
 func _exit_tree() -> void:
-	_restore_language_icons()
+	_icon_registration_pending = false
 
 func _enable_plugin() -> void:
-	_register_language_icons()
+	_queue_register_language_icons()
 	if not ProjectSettings.has_setting("autoload/EventLoop"):
 		add_autoload_singleton("EventLoop", "res://addons/gode/runtime/event_loop.gd")
 
@@ -25,7 +27,16 @@ func _disable_plugin() -> void:
 	if ProjectSettings.has_setting("autoload/EventLoop"):
 		remove_autoload_singleton("EventLoop")
 
+func _queue_register_language_icons() -> void:
+	if _icon_registration_pending or _icons_registered:
+		return
+
+	_icon_registration_pending = true
+	_register_language_icons.call_deferred()
+
 func _register_language_icons() -> void:
+	_icon_registration_pending = false
+
 	var theme := get_editor_interface().get_editor_theme()
 	if not theme:
 		return
@@ -41,6 +52,7 @@ func _register_language_icons() -> void:
 			_previous_icons[icon_name] = theme.get_icon(icon_name, EDITOR_ICON_THEME_TYPE) if theme.has_icon(icon_name, EDITOR_ICON_THEME_TYPE) else null
 
 		theme.set_icon(icon_name, EDITOR_ICON_THEME_TYPE, icon)
+	_icons_registered = true
 
 func _restore_language_icons() -> void:
 	if _previous_icons.is_empty():
@@ -57,3 +69,4 @@ func _restore_language_icons() -> void:
 		else:
 			theme.clear_icon(icon_name, EDITOR_ICON_THEME_TYPE)
 	_previous_icons.clear()
+	_icons_registered = false
