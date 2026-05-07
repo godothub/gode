@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-architecture="x64"
+architecture="arm64"
 generator=""
 jobs=0
 fresh=0
