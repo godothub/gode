@@ -28,6 +28,7 @@ protected:
 	mutable godot::StringName base_class_name;
 	mutable godot::HashMap<godot::StringName, godot::MethodInfo> methods;
 	mutable godot::HashMap<godot::StringName, godot::MethodInfo> signals;
+	mutable godot::HashMap<godot::StringName, godot::Dictionary> rpc_configs;
 	mutable godot::HashMap<godot::StringName, godot::PropertyInfo> properties;
 	mutable godot::Vector<godot::PropertyInfo> property_list; // ordered, may include GROUP entries
 	mutable godot::HashMap<godot::StringName, godot::Variant> property_defaults;

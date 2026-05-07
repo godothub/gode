@@ -1,6 +1,7 @@
 #include "register_classes.gen.h"
 #include <node.h>
 #include <node_api.h>
+#include <godot_cpp/classes/engine.hpp>
 
 // Classes
 {% for item in classes %}
@@ -17,26 +18,35 @@ void register_classes(Napi::Env env, Napi::Object exports) {
 
     // Register Singletons
     {% for singleton in singletons %}
-    if (env.Global().Get("{{ singleton.name }}").IsUndefined()) {
-        env.Global().DefineProperty(Napi::PropertyDescriptor::Accessor(
-            env, 
-            env.Global(), 
-            "{{ singleton.name }}", 
-            [](const Napi::CallbackInfo &info) -> Napi::Value {
-                static Napi::ObjectReference ref;
-                if (ref.IsEmpty()) {
-                    godot::{{ singleton.type }}* instance = godot::{{ singleton.type }}::get_singleton();
-                    if (!instance) return info.Env().Null();
-                    Napi::Object obj = {{ singleton.binding_type }}Binding::create_singleton(info.Env(), instance);
-                    ref = Napi::Persistent(obj);
-                    ref.SuppressDestruct();
-                }
-                return ref.Value();
-            },
-            napi_enumerable,
-            nullptr
-        ));
+    {% if singleton.name == "EditorInterface" %}
+    if (godot::Engine::get_singleton() && godot::Engine::get_singleton()->is_editor_hint()) {
+    {% endif %}
+    {
+        auto getter_{{ singleton.name }} = [](const Napi::CallbackInfo &info) -> Napi::Value {
+            static Napi::ObjectReference ref;
+            if (ref.IsEmpty()) {
+                godot::{{ singleton.type }}* instance = godot::{{ singleton.type }}::get_singleton();
+                if (!instance) return info.Env().Null();
+                Napi::Object obj = {{ singleton.binding_type }}Binding::create_singleton(info.Env(), instance);
+                ref = Napi::Persistent(obj);
+                ref.SuppressDestruct();
+            }
+            return ref.Value();
+        };
+        if (!env.Global().Has("{{ singleton.name }}")) {
+            env.Global().DefineProperty(Napi::PropertyDescriptor::Accessor(
+                env, env.Global(), "{{ singleton.name }}", getter_{{ singleton.name }}, napi_enumerable, nullptr
+            ));
+        }
+        if (!exports.Has("{{ singleton.name }}")) {
+            exports.DefineProperty(Napi::PropertyDescriptor::Accessor(
+                env, exports, "{{ singleton.name }}", getter_{{ singleton.name }}, napi_enumerable, nullptr
+            ));
+        }
     }
+    {% if singleton.name == "EditorInterface" %}
+    }
+    {% endif %}
     {% endfor %}
 }
 

@@ -11,6 +11,8 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/core/gdextension_interface_loader.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
+#include <cctype>
 
 using namespace godot;
 using namespace gode;
@@ -19,6 +21,150 @@ extern "C" const TSLanguage *tree_sitter_javascript();
 
 void Javascript::_bind_methods() {
 }
+
+namespace {
+
+static std::string node_text(const std::string &p_source, TSNode p_node) {
+	if (ts_node_is_null(p_node)) {
+		return std::string();
+	}
+	uint32_t start = ts_node_start_byte(p_node);
+	uint32_t end = ts_node_end_byte(p_node);
+	return p_source.substr(start, end - start);
+}
+
+static std::string strip_quotes(std::string p_text) {
+	if (p_text.size() >= 2 && ((p_text.front() == '"' && p_text.back() == '"') || (p_text.front() == '\'' && p_text.back() == '\''))) {
+		return p_text.substr(1, p_text.size() - 2);
+	}
+	return p_text;
+}
+
+static Variant::Type parse_variant_type(const std::string &p_type) {
+	if (p_type == "bool" || p_type == "boolean" || p_type == "Boolean") return Variant::BOOL;
+	if (p_type == "int") return Variant::INT;
+	if (p_type == "float" || p_type == "number" || p_type == "Number") return Variant::FLOAT;
+	if (p_type == "String" || p_type == "string") return Variant::STRING;
+	if (p_type == "Vector2") return Variant::VECTOR2;
+	if (p_type == "Vector2i") return Variant::VECTOR2I;
+	if (p_type == "Vector3") return Variant::VECTOR3;
+	if (p_type == "Vector3i") return Variant::VECTOR3I;
+	if (p_type == "Vector4") return Variant::VECTOR4;
+	if (p_type == "Vector4i") return Variant::VECTOR4I;
+	if (p_type == "Color") return Variant::COLOR;
+	if (p_type == "NodePath") return Variant::NODE_PATH;
+	if (p_type == "Object") return Variant::OBJECT;
+	return Variant::NIL;
+}
+
+static void parse_signal_entry(const std::string &p_signal_name, TSNode p_value, const std::string &p_source, HashMap<StringName, MethodInfo> &r_signals) {
+	MethodInfo mi;
+	mi.name = StringName(p_signal_name.c_str());
+
+	TSNode args_node;
+	if (strcmp(ts_node_type(p_value), "array") == 0) {
+		args_node = p_value;
+	} else if (strcmp(ts_node_type(p_value), "object") == 0) {
+		for (uint32_t i = 0; i < ts_node_named_child_count(p_value); i++) {
+			TSNode pair = ts_node_named_child(p_value, i);
+			if (strcmp(ts_node_type(pair), "pair") != 0) continue;
+			TSNode key = ts_node_child_by_field_name(pair, "key", 3);
+			if (strip_quotes(node_text(p_source, key)) == "args") {
+				args_node = ts_node_child_by_field_name(pair, "value", 5);
+				break;
+			}
+		}
+	}
+
+	if (!ts_node_is_null(args_node) && strcmp(ts_node_type(args_node), "array") == 0) {
+		for (uint32_t i = 0; i < ts_node_named_child_count(args_node); i++) {
+			TSNode arg_node = ts_node_named_child(args_node, i);
+			PropertyInfo arg;
+			arg.type = Variant::NIL;
+			if (strcmp(ts_node_type(arg_node), "string") == 0) {
+				arg.name = StringName(strip_quotes(node_text(p_source, arg_node)).c_str());
+			} else if (strcmp(ts_node_type(arg_node), "object") == 0) {
+				for (uint32_t j = 0; j < ts_node_named_child_count(arg_node); j++) {
+					TSNode pair = ts_node_named_child(arg_node, j);
+					if (strcmp(ts_node_type(pair), "pair") != 0) continue;
+					TSNode key = ts_node_child_by_field_name(pair, "key", 3);
+					TSNode val = ts_node_child_by_field_name(pair, "value", 5);
+					std::string key_text = strip_quotes(node_text(p_source, key));
+					if (key_text == "name") {
+						arg.name = StringName(strip_quotes(node_text(p_source, val)).c_str());
+					} else if (key_text == "type") {
+						arg.type = parse_variant_type(strip_quotes(node_text(p_source, val)));
+					}
+				}
+			}
+			mi.arguments.push_back(arg);
+		}
+	}
+
+	r_signals[mi.name] = mi;
+}
+
+static int parse_rpc_mode(const std::string &p_mode) {
+	if (p_mode == "any_peer" || p_mode == "any") return 1;
+	if (p_mode == "authority" || p_mode == "master") return 2;
+	if (p_mode == "disabled") return 0;
+	return std::atoi(p_mode.c_str());
+}
+
+static int parse_transfer_mode(const std::string &p_mode) {
+	if (p_mode == "unreliable") return 0;
+	if (p_mode == "unreliable_ordered") return 1;
+	if (p_mode == "reliable") return 2;
+	return std::atoi(p_mode.c_str());
+}
+
+static void parse_static_metadata(const std::string &p_name, TSNode p_value, const std::string &p_source, HashMap<StringName, MethodInfo> &r_signals, HashMap<StringName, Dictionary> &r_rpc_configs) {
+	if (p_name == "signals" && strcmp(ts_node_type(p_value), "object") == 0) {
+		for (uint32_t i = 0; i < ts_node_named_child_count(p_value); i++) {
+			TSNode pair = ts_node_named_child(p_value, i);
+			if (strcmp(ts_node_type(pair), "pair") != 0) continue;
+			TSNode key = ts_node_child_by_field_name(pair, "key", 3);
+			TSNode val = ts_node_child_by_field_name(pair, "value", 5);
+			parse_signal_entry(strip_quotes(node_text(p_source, key)), val, p_source, r_signals);
+		}
+		return;
+	}
+
+	if ((p_name == "rpc_config" || p_name == "rpcs") && strcmp(ts_node_type(p_value), "object") == 0) {
+		for (uint32_t i = 0; i < ts_node_named_child_count(p_value); i++) {
+			TSNode pair = ts_node_named_child(p_value, i);
+			if (strcmp(ts_node_type(pair), "pair") != 0) continue;
+			StringName method(strip_quotes(node_text(p_source, ts_node_child_by_field_name(pair, "key", 3))).c_str());
+			TSNode cfg_node = ts_node_child_by_field_name(pair, "value", 5);
+			Dictionary cfg;
+			cfg["rpc_mode"] = 2;
+			cfg["transfer_mode"] = 2;
+			cfg["call_local"] = false;
+			cfg["channel"] = 0;
+			if (strcmp(ts_node_type(cfg_node), "object") == 0) {
+				for (uint32_t j = 0; j < ts_node_named_child_count(cfg_node); j++) {
+					TSNode cfg_pair = ts_node_named_child(cfg_node, j);
+					if (strcmp(ts_node_type(cfg_pair), "pair") != 0) continue;
+					std::string key = strip_quotes(node_text(p_source, ts_node_child_by_field_name(cfg_pair, "key", 3)));
+					TSNode val = ts_node_child_by_field_name(cfg_pair, "value", 5);
+					std::string val_text = strip_quotes(node_text(p_source, val));
+					if (key == "rpc_mode" || key == "mode") {
+						cfg["rpc_mode"] = parse_rpc_mode(val_text);
+					} else if (key == "transfer_mode" || key == "transferMode") {
+						cfg["transfer_mode"] = parse_transfer_mode(val_text);
+					} else if (key == "call_local" || key == "callLocal") {
+						cfg["call_local"] = val_text == "true";
+					} else if (key == "channel") {
+						cfg["channel"] = std::atoi(val_text.c_str());
+					}
+				}
+			}
+			r_rpc_configs[method] = cfg;
+		}
+	}
+}
+
+} // namespace
 
 bool Javascript::compile() const {
 	if (!is_dirty) {
@@ -60,6 +206,7 @@ bool Javascript::compile() const {
 	base_class_name = StringName();
 	methods.clear();
 	signals.clear();
+	rpc_configs.clear();
 	properties.clear();
 	property_defaults.clear();
 	constants.clear();
@@ -92,28 +239,31 @@ bool Javascript::compile() const {
 				class_name = StringName(source.substr(start, end - start).c_str());
 			}
 
-			// Get base class (extends)
-			TSNode heritage = ts_node_child_by_field_name(child, "heritage", strlen("heritage"));
-			if (!ts_node_is_null(heritage)) {
-				// heritage structure is typically "extends BaseClass"
-				// We iterate children of heritage clause
-				uint32_t heritage_child_count = ts_node_child_count(heritage);
-				for (uint32_t j = 0; j < heritage_child_count; j++) {
-					TSNode heritage_child = ts_node_child(heritage, j);
-					if (strcmp(ts_node_type(heritage_child), "extends_clause") == 0) {
-						TSNode base_node = ts_node_child_by_field_name(heritage_child, "value", strlen("value")); // or just the identifier
-						if (ts_node_child_count(base_node) > 0) {
-							// Sometimes it's a member expression like godot.Node
-							// For simplicity, we just grab the text
+			// Get base class (extends). tree-sitter-javascript exposes this as
+			// "superclass"; older/other grammars may wrap it in a heritage clause.
+			TSNode base_node = ts_node_child_by_field_name(child, "superclass", strlen("superclass"));
+			if (ts_node_is_null(base_node)) {
+				TSNode heritage = ts_node_child_by_field_name(child, "heritage", strlen("heritage"));
+				if (!ts_node_is_null(heritage)) {
+					uint32_t heritage_child_count = ts_node_child_count(heritage);
+					for (uint32_t j = 0; j < heritage_child_count; j++) {
+						TSNode heritage_child = ts_node_child(heritage, j);
+						if (strcmp(ts_node_type(heritage_child), "extends_clause") == 0 && ts_node_child_count(heritage_child) > 0) {
+							base_node = ts_node_child(heritage_child, ts_node_child_count(heritage_child) - 1);
+							break;
 						}
-						// Actually, extends_clause child at index 1 is usually the class
-						// Let's just grab the text of the last child of extends_clause for now
-						TSNode value_node = ts_node_child(heritage_child, ts_node_child_count(heritage_child) - 1);
-						uint32_t start = ts_node_start_byte(value_node);
-						uint32_t end = ts_node_end_byte(value_node);
-						base_class_name = StringName(source.substr(start, end - start).c_str());
 					}
 				}
+			}
+			if (!ts_node_is_null(base_node)) {
+				uint32_t start = ts_node_start_byte(base_node);
+				uint32_t end = ts_node_end_byte(base_node);
+				std::string base = source.substr(start, end - start);
+				size_t dot = base.rfind('.');
+				if (dot != std::string::npos) {
+					base = base.substr(dot + 1);
+				}
+				base_class_name = StringName(base.c_str());
 			}
 
 			// Iterate class body for methods and properties
@@ -145,6 +295,7 @@ bool Javascript::compile() const {
 						uint32_t name_start = ts_node_start_byte(prop_name_node);
 						uint32_t name_end = ts_node_end_byte(prop_name_node);
 						std::string prop_name = source.substr(name_start, name_end - name_start);
+						parse_static_metadata(prop_name, value_node, source, signals, rpc_configs);
 
 						if (prop_name == "exports") {
 							uint32_t obj_child_count = ts_node_child_count(value_node);
@@ -188,35 +339,12 @@ bool Javascript::compile() const {
 													uint32_t pvs = ts_node_start_byte(pv) + 1;
 													uint32_t pve = ts_node_end_byte(pv) - 1;
 													std::string type_str = source.substr(pvs, pve - pvs);
-													if (type_str == "bool") pi.type = Variant::BOOL;
-													else if (type_str == "int") pi.type = Variant::INT;
-													else if (type_str == "float" || type_str == "number") pi.type = Variant::FLOAT;
-													else if (type_str == "String" || type_str == "string") pi.type = Variant::STRING;
-													else if (type_str == "Vector2") pi.type = Variant::VECTOR2;
-													else if (type_str == "Vector2i") pi.type = Variant::VECTOR2I;
-													else if (type_str == "Vector3") pi.type = Variant::VECTOR3;
-													else if (type_str == "Vector3i") pi.type = Variant::VECTOR3I;
-													else if (type_str == "Vector4") pi.type = Variant::VECTOR4;
-													else if (type_str == "Vector4i") pi.type = Variant::VECTOR4I;
-													else if (type_str == "Color") pi.type = Variant::COLOR;
-													else if (type_str == "NodePath") pi.type = Variant::NODE_PATH;
-													else if (type_str == "Object") pi.type = Variant::OBJECT;
+													pi.type = parse_variant_type(type_str);
 												} else if (strcmp(pv_type, "identifier") == 0) {
 													uint32_t pvs = ts_node_start_byte(pv);
 													uint32_t pve = ts_node_end_byte(pv);
 													std::string type_str = source.substr(pvs, pve - pvs);
-													if (type_str == "Boolean") pi.type = Variant::BOOL;
-													else if (type_str == "Number") pi.type = Variant::FLOAT;
-													else if (type_str == "String") pi.type = Variant::STRING;
-													else if (type_str == "Vector2") pi.type = Variant::VECTOR2;
-													else if (type_str == "Vector2i") pi.type = Variant::VECTOR2I;
-													else if (type_str == "Vector3") pi.type = Variant::VECTOR3;
-													else if (type_str == "Vector3i") pi.type = Variant::VECTOR3I;
-													else if (type_str == "Vector4") pi.type = Variant::VECTOR4;
-													else if (type_str == "Vector4i") pi.type = Variant::VECTOR4I;
-													else if (type_str == "Color") pi.type = Variant::COLOR;
-													else if (type_str == "NodePath") pi.type = Variant::NODE_PATH;
-													else if (type_str == "Object") pi.type = Variant::OBJECT;
+													pi.type = parse_variant_type(type_str);
 												}
 											} else if (field_key == "hint" && strcmp(ts_node_type(pv), "number") == 0) {
 												uint32_t pvs = ts_node_start_byte(pv);
@@ -295,6 +423,33 @@ bool Javascript::compile() const {
 					methods[method_name] = mi;
 					member_lines[method_name] = ts_node_start_point(member).row + 1;
 				}
+			}
+		}
+	}
+
+	if (base_class_name == StringName()) {
+		size_t class_pos = source.find("class");
+		size_t extends_pos = class_pos == std::string::npos ? std::string::npos : source.find("extends", class_pos);
+		if (extends_pos != std::string::npos) {
+			size_t start = extends_pos + strlen("extends");
+			while (start < source.size() && std::isspace(static_cast<unsigned char>(source[start]))) {
+				start++;
+			}
+			size_t end = start;
+			while (end < source.size()) {
+				unsigned char c = static_cast<unsigned char>(source[end]);
+				if (!(std::isalnum(c) || c == '_' || c == '$' || c == '.')) {
+					break;
+				}
+				end++;
+			}
+			if (end > start) {
+				std::string base = source.substr(start, end - start);
+				size_t dot = base.rfind('.');
+				if (dot != std::string::npos) {
+					base = base.substr(dot + 1);
+				}
+				base_class_name = StringName(base.c_str());
 			}
 		}
 	}
@@ -474,6 +629,7 @@ bool Javascript::_inherits_script(const Ref<Script> &p_script) const {
 }
 
 StringName Javascript::_get_instance_base_type() const {
+	compile();
 	return base_class_name;
 }
 
@@ -682,5 +838,10 @@ bool Javascript::_is_placeholder_fallback_enabled() const {
 }
 
 Variant Javascript::_get_rpc_config() const {
-	return Variant();
+	compile();
+	Dictionary config;
+	for (const KeyValue<StringName, Dictionary> &E : rpc_configs) {
+		config[E.key] = E.value;
+	}
+	return config;
 }

@@ -2,6 +2,7 @@
 #include "utils/func_utils.h"
 #include "utils/value_convert.h"
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
 {% if vararg_header_include %}
 #include "{{ vararg_header_include }}"
 {% endif %}
@@ -27,7 +28,13 @@ godot::Object *{{ class_name }}Binding_unwrap(const Napi::Object &obj) {
 }
 
 void {{ class_name }}Binding_wrap(const Napi::Object &obj, godot::Object *instance) {
-    {{ class_name }}Binding::Unwrap(obj)->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(instance);
+    {{ class_name }}Binding *binding = {{ class_name }}Binding::Unwrap(obj);
+    binding->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(instance);
+    binding->internal_object_id = binding->instance ? binding->instance->get_instance_id() : 0;
+    godot::RefCounted *ref = godot::Object::cast_to<godot::RefCounted>(binding->instance);
+    if (ref) {
+        ref->reference();
+    }
 }
 
 Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
@@ -202,17 +209,15 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
     Napi::Object js_this = info.This().As<Napi::Object>();
     {{ class_name }}Binding* binding_instance = {{ class_name }}Binding::Unwrap(js_this);
 
-    /*
     if (binding_instance->internal_object_id != 0) {
         godot::Object* obj = godot::ObjectDB::get_instance(binding_instance->internal_object_id);
         if (!obj) {
             binding_instance->instance = nullptr;
-            Napi::Error::New(info.Env(), "Object has been deleted").ThrowAsJavaScriptException();
+            Napi::Error::New(info.Env(), "Object has been deleted in {{ js_class_name }}.{{ method.name }}").ThrowAsJavaScriptException();
             return info.Env().Null();
         }
         binding_instance->instance = godot::Object::cast_to<godot::{{ godot_class_name }}>(obj);
     }
-    */
 
     godot::{{ godot_class_name }}* instance = binding_instance->instance;
     if (!instance) {
