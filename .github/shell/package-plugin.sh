@@ -46,7 +46,7 @@ archive_path="$output_directory/$archive_name"
 required_files=(
 	"plugin.cfg"
 	"gode.gd"
-	"binary/.gdextension"
+	"binary/gode.gdextension"
 )
 required_binaries=(
 	"binary/windows/x64/libgode.dll"

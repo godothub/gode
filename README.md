@@ -162,4 +162,4 @@ Make sure dependencies are installed in the Godot project root under `node_modul
 
 **The plugin fails to load after export**
 
-Make sure the export platform is listed as supported, and that the matching binary exists in `addons/gode/binary/.gdextension`.
+Make sure the export platform is listed as supported, and that the matching binary exists in `addons/gode/binary/gode.gdextension`.
