@@ -146,7 +146,65 @@ Example scripts:
 - `example/scripts/test_workspace.js`
 - `example/scripts/test_catalog.js`
 
-### 6. FAQ
+## Advanced Usage
+
+### Calling Between JavaScript and GDScript
+
+JavaScript scripts are Godot scripts. After a JavaScript script is attached to a node, GDScript can call its methods like any other script:
+
+```js
+import { Node } from "godot";
+
+export default class PlayerLogic extends Node {
+	say_hello(name) {
+		console.log("hello", name);
+		return `hi ${name}`;
+	}
+}
+```
+
+```gdscript
+var result = $Player.say_hello("Godot")
+print(result)
+```
+
+JavaScript can also call methods on GDScript nodes once it has a node reference:
+
+```js
+export default class Caller extends Node {
+	_ready() {
+		const node = this.get_node("../SomeGDScriptNode");
+		const result = node.some_method("from JavaScript");
+		console.log(result);
+	}
+}
+```
+
+For loose coupling, use Godot signals. JavaScript can emit signals and can also await Godot signals with `to_signal`:
+
+```js
+const value = await button.to_signal("pressed");
+```
+
+### TypeScript Workflow
+
+Gode does not run the TypeScript compiler automatically. Keep your TypeScript build under your project control:
+
+```bash
+npx tsc --watch
+```
+
+TypeScript scripts should compile to matching JavaScript files under `res://dist`. For example, `res://scripts/player.ts` should produce `res://dist/scripts/player.js`.
+
+Use `console.log()` / `console.error()` for script-level debugging. Output appears in the Godot output panel and in the terminal that launched Godot.
+
+### Exporting Projects
+
+Gode resolves npm packages from the project root `node_modules`. Export presets should include runtime JavaScript/JSON files, `dist`, `node_modules`, and `package.json`. The example project uses `all_resources`, which is conservative and favors reliable exports.
+
+Dependency trimming, bundling, native npm addon handling, and production-only installs should stay in your project build pipeline. This keeps Gode compatible with npm, pnpm, yarn, bun, and custom build setups.
+
+## FAQ
 
 **JavaScript / TypeScript script types do not appear after enabling the plugin**
 

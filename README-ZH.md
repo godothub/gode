@@ -146,7 +146,65 @@ godot --path example
 - `example/scripts/test_workspace.js`
 - `example/scripts/test_catalog.js`
 
-### 6. 常见问题
+## 进阶用法
+
+### JavaScript 与 GDScript 互相调用
+
+JavaScript 脚本也是 Godot 脚本。把 JavaScript 脚本挂到节点后，GDScript 可以像调用普通脚本一样调用它的方法：
+
+```js
+import { Node } from "godot";
+
+export default class PlayerLogic extends Node {
+	say_hello(name) {
+		console.log("hello", name);
+		return `hi ${name}`;
+	}
+}
+```
+
+```gdscript
+var result = $Player.say_hello("Godot")
+print(result)
+```
+
+JavaScript 也可以在拿到 GDScript 节点引用后调用它的方法：
+
+```js
+export default class Caller extends Node {
+	_ready() {
+		const node = this.get_node("../SomeGDScriptNode");
+		const result = node.some_method("from JavaScript");
+		console.log(result);
+	}
+}
+```
+
+如果希望降低耦合，可以使用 Godot 信号。JavaScript 可以发出信号，也可以用 `to_signal` 等待 Godot 信号：
+
+```js
+const value = await button.to_signal("pressed");
+```
+
+### TypeScript 工作流
+
+Gode 不会自动运行 TypeScript 编译器。TypeScript 构建应由你的项目自行控制：
+
+```bash
+npx tsc --watch
+```
+
+TypeScript 脚本应编译到 `res://dist` 下对应的 JavaScript 文件。例如，`res://scripts/player.ts` 应生成 `res://dist/scripts/player.js`。
+
+脚本层调试可以使用 `console.log()` / `console.error()`。输出会显示在 Godot 输出面板和启动 Godot 的终端中。
+
+### 导出项目
+
+Gode 会从项目根目录的 `node_modules` 中解析 npm 包。导出预设应包含运行时 JavaScript/JSON 文件、`dist`、`node_modules` 和 `package.json`。示例项目使用 `all_resources`，这是偏保守、优先保证导出后可运行的方式。
+
+依赖裁剪、打包、npm 原生插件处理、生产依赖安装等应放在项目自己的构建流程里。这样 Gode 可以兼容 npm、pnpm、yarn、bun 和自定义构建方式。
+
+## 常见问题
 
 **启用插件后看不到 JavaScript / TypeScript 脚本类型**
 
