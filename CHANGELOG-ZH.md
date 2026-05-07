@@ -1,3 +1,8 @@
+## 1.6.0
+
+- 将内置类型常量暴露到 JavaScript 构造器和实例上，包括 `Vector3.UP`、`Vector3.ZERO` 和 `Color.WHITE` 等值。
+- 保留生成的 JavaScript 类绑定中的 Godot API 默认参数，使 `Node3D.look_at(target)` 等调用会使用 Godot 文档中的默认值，而不是零值/空值。
+
 ## 1.5.0
 
 - 新增 JavaScript autoload 支持：默认导出类只要继承自 Godot 基类即可实例化，也支持 `godot.Node` 这类导入写法。

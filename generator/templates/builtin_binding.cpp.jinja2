@@ -1,6 +1,7 @@
 #include "{{ header_include }}"
 #include "utils/func_utils.h"
 #include "utils/value_convert.h"
+#include <cmath>
 {% if vararg_header_include %}
 #include "{{ vararg_header_include }}"
 {% endif %}
@@ -34,6 +35,11 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
 
     constructor = Napi::Persistent(func);
     constructor.SuppressDestruct();
+
+    {% for constant in constants %}
+    func.As<Napi::Object>().Set("{{ constant.name }}", gode::godot_to_napi(env, {{ constant.cpp_value }}));
+    func.Get("prototype").As<Napi::Object>().Set("{{ constant.name }}", gode::godot_to_napi(env, {{ constant.cpp_value }}));
+    {% endfor %}
 
     Napi::Object global = env.Global();
 	global.Set("{{ js_class_name }}", func);

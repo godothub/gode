@@ -9,6 +9,44 @@ from core.base_generator import CodeGenerator
 from utils.api_path import find_extension_api_json
 from utils.string_utils import to_snake_case, sanitize_method_name
 
+BUILTIN_TYPES = {
+    'String', 'StringName', 'NodePath', 'Variant', 'Vector2', 'Vector2i', 'Vector3', 'Vector3i',
+    'Vector4', 'Vector4i', 'Color', 'Rect2', 'Rect2i', 'Transform2D', 'Plane', 'Quaternion',
+    'AABB', 'Basis', 'Transform3D', 'Projection', 'Callable', 'Signal', 'Dictionary', 'Array',
+    'PackedByteArray', 'PackedInt32Array', 'PackedInt64Array', 'PackedFloat32Array',
+    'PackedFloat64Array', 'PackedStringArray', 'PackedVector2Array', 'PackedVector3Array',
+    'PackedColorArray',
+}
+
+
+def default_arg_napi_expr(arg, env_expr='info.Env()'):
+    value = arg.get('default_value')
+    if value is None:
+        return f"{env_expr}.Undefined()"
+
+    arg_type = arg.get('type')
+    if value == 'null':
+        return f"{env_expr}.Null()"
+    if arg_type == 'bool' or value in ('true', 'false'):
+        return f"Napi::Boolean::New({env_expr}, {value})"
+    if arg_type in ('int', 'float') or isinstance(value, (int, float)):
+        return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+    if isinstance(value, str) and arg_type in BUILTIN_TYPES:
+        if value == '[]':
+            return f"gode::godot_to_napi({env_expr}, godot::{arg_type}())"
+        if value == '{}':
+            return f"gode::godot_to_napi({env_expr}, godot::{arg_type}())"
+        cpp_value = value
+        if value.startswith(f"{arg_type}("):
+            cpp_value = value.replace(f"{arg_type}(", f"godot::{arg_type}(", 1).replace("inf", "INFINITY")
+        elif arg_type in ('String', 'StringName', 'NodePath') and value.startswith('"'):
+            cpp_value = f"godot::{arg_type}({value})"
+        return f"gode::godot_to_napi({env_expr}, {cpp_value})"
+    if isinstance(value, str) and value.lstrip('-').isdigit():
+        return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+    return f"{env_expr}.Undefined()"
+
+
 class ClassGenerator(CodeGenerator):
     def get_cpp_type(self, type_name, meta, refcounted_classes, is_arg=False):
         if type_name == 'void': return 'void'
@@ -180,6 +218,13 @@ class ClassGenerator(CodeGenerator):
                 
                 for arg in method.get('arguments', []):
                     process_type(arg['type'])
+
+                method['default_args'] = []
+                method['has_default_args'] = False
+                for arg in method.get('arguments', []):
+                    if 'default_value' in arg:
+                        method['has_default_args'] = True
+                    method['default_args'].append(default_arg_napi_expr(arg))
                 
                 # Handle overloads
                 is_overloaded = method_counts[method['name']] > 1 or method['name'] in problematic_methods

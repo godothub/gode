@@ -1,3 +1,8 @@
+## 1.6.0
+
+- Exposed built-in type constants on JavaScript constructors and instances, including values such as `Vector3.UP`, `Vector3.ZERO`, and `Color.WHITE`.
+- Preserved Godot API default arguments in generated JavaScript class bindings, so calls such as `Node3D.look_at(target)` use Godot's documented defaults instead of zero/empty fallback values.
+
 ## 1.5.0
 
 - Added JavaScript autoload support for scripts whose default export extends a Godot base class, including `godot.Node` style imports.

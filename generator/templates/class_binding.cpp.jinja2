@@ -1,6 +1,7 @@
 #include "{{ header_include }}"
 #include "utils/func_utils.h"
 #include "utils/value_convert.h"
+#include <cmath>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 {% if vararg_header_include %}
@@ -256,6 +257,13 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
          return info.Env().Null();
     }
     {% endif %}
+    {% if method.has_default_args %}
+    std::vector<Napi::Value> default_args = {
+        {% for default_arg in method.default_args %}
+        {{ default_arg }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    };
+    {% endif %}
         {% if method.is_static %}
         {% if method.is_vararg %}
             {% if method.return_type %}
@@ -265,9 +273,9 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
             {% endif %}
         {% else %}
             {% if method.return_type %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info{% if method.has_default_args %}, default_args{% endif %});
             {% else %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, info{% if method.has_default_args %}, default_args{% endif %});
             {% endif %}
         {% endif %}
     {% else %}
@@ -281,29 +289,29 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
             {% if method.is_const %}
                 {% if method.return_type %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% else %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% endif %}
             {% else %}
                 {% if method.return_type %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% else %}
                     {% if method.cast_signature %}
-    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info);
+    return call_builtin_method({{ method.cast_signature }}(&godot::{{ godot_class_name }}::{{ method.name_cpp }}), instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% else %}
-    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info);
+    return call_builtin_method(&godot::{{ godot_class_name }}::{{ method.name_cpp }}, instance, info{% if method.has_default_args %}, default_args{% endif %});
                     {% endif %}
                 {% endif %}
             {% endif %}

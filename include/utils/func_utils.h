@@ -20,6 +20,16 @@ inline std::vector<Napi::Value> to_args_array(const Napi::CallbackInfo &info) {
 	return args;
 }
 
+inline void apply_default_args(std::vector<Napi::Value> &args, std::size_t target_count, const std::vector<Napi::Value> &default_args, Napi::Env env) {
+	for (std::size_t i = args.size(); i < target_count; ++i) {
+		if (i < default_args.size() && !default_args[i].IsUndefined()) {
+			args.push_back(default_args[i]);
+		} else {
+			args.push_back(env.Undefined());
+		}
+	}
+}
+
 // Helper: Static Method Implementation
 template <typename R, typename... P, std::size_t... Is>
 inline Napi::Value call_builtin_method_impl(R (*Func)(P...), Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
@@ -60,6 +70,13 @@ inline Napi::Value call_builtin_method(R (*Func)(P...), const Napi::CallbackInfo
 	if (args.size() < sizeof...(P)) {
 		args.resize(sizeof...(P), info.Env().Undefined());
 	}
+	return call_builtin_method_impl(Func, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
+}
+
+template <typename R, typename... P>
+inline Napi::Value call_builtin_method(R (*Func)(P...), const Napi::CallbackInfo &info, const std::vector<Napi::Value> &default_args) {
+	std::vector<Napi::Value> args = to_args_array(info);
+	apply_default_args(args, sizeof...(P), default_args, info.Env());
 	return call_builtin_method_impl(Func, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
@@ -160,6 +177,13 @@ inline Napi::Value call_builtin_method(R (T::*Func)(P...), T *instance, const Na
 	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
+template <typename T, typename R, typename... P>
+inline Napi::Value call_builtin_method(R (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info, const std::vector<Napi::Value> &default_args) {
+	std::vector<Napi::Value> args = to_args_array(info);
+	apply_default_args(args, sizeof...(P), default_args, info.Env());
+	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
+}
+
 // 7. Instance Method (Regular Const)
 template <typename T, typename R, typename... P>
 inline Napi::Value call_builtin_method(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info) {
@@ -167,6 +191,13 @@ inline Napi::Value call_builtin_method(R (T::*Func)(P...) const, T *instance, co
 	if (args.size() < sizeof...(P)) {
 		args.resize(sizeof...(P), info.Env().Undefined());
 	}
+	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
+}
+
+template <typename T, typename R, typename... P>
+inline Napi::Value call_builtin_method(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info, const std::vector<Napi::Value> &default_args) {
+	std::vector<Napi::Value> args = to_args_array(info);
+	apply_default_args(args, sizeof...(P), default_args, info.Env());
 	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 

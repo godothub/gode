@@ -9,6 +9,15 @@ from core.base_generator import CodeGenerator
 from utils.api_path import find_extension_api_json
 from utils.string_utils import to_snake_case, sanitize_method_name
 
+
+def constant_cpp_value(constant):
+    value = constant.get('value')
+    type_name = constant.get('type')
+    if isinstance(value, str) and type_name and value.startswith(f"{type_name}("):
+        return value.replace(f"{type_name}(", f"godot::{type_name}(", 1).replace("inf", "INFINITY")
+    return value
+
+
 # Map of classes and their direct fields (vs properties accessed via methods)
 DIRECT_FIELDS = {
     'Vector2': ['x', 'y'],
@@ -412,13 +421,20 @@ class BuiltinClassGenerator(CodeGenerator):
                     'overloads': overloads
                 })
 
+            constants = []
+            for constant in builtin_class.get('constants', []):
+                constants.append({
+                    **constant,
+                    'cpp_value': constant_cpp_value(constant),
+                })
+
             context = {
                 'js_class_name': js_class_name,
                 'class_name': class_name,
                 'methods': methods,
                 'vararg_methods': vararg_methods,
                 'members': members,
-                'constants': builtin_class.get('constants', []),
+                'constants': constants,
                 'operators': grouped_operators, # Changed structure!
                 'constructors': constructors,
                 'has_destructor': builtin_class.get('has_destructor', False),
