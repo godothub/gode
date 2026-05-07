@@ -6,6 +6,7 @@ nodejs/
 build/
 build-*/
 dist/
+*.import
 
 # Python cache files
 __pycache__/

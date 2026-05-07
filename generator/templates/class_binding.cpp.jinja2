@@ -67,6 +67,23 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     }
     {% endif %}
 
+    // Add constants and enum values to both the constructor and prototype. Singletons
+    // are exported as wrapped instances, so prototype properties make expressions like
+    // ResourceLoader.THREAD_LOAD_LOADED work on singleton objects too.
+    {% for constant in constants %}
+    func.As<Napi::Object>().Set("{{ constant.name }}", Napi::Number::New(env, static_cast<double>({{ constant.value }})));
+    {% endfor %}
+    {% for enum in enums %}
+    {
+        Napi::Object enum_values = Napi::Object::New(env);
+        {% for value in enum["values"] %}
+        enum_values.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        func.As<Napi::Object>().Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        {% endfor %}
+        func.As<Napi::Object>().Set("{{ enum.name }}", enum_values);
+    }
+    {% endfor %}
+
     // Manually attach methods to prototype to avoid InstanceMethod's strict 'this' check
     Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
     // Mark generated C++ binding prototypes so script method lookup can stop before entering bindings.
@@ -101,6 +118,20 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     // Add toString method
     prototype.Set("toString", Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "toString"));
     prototype.Set(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "inspect"));
+
+    {% for constant in constants %}
+    prototype.Set("{{ constant.name }}", Napi::Number::New(env, static_cast<double>({{ constant.value }})));
+    {% endfor %}
+    {% for enum in enums %}
+    {
+        Napi::Object enum_values = Napi::Object::New(env);
+        {% for value in enum["values"] %}
+        enum_values.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        prototype.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        {% endfor %}
+        prototype.Set("{{ enum.name }}", enum_values);
+    }
+    {% endfor %}
 
     {% for method in methods %}
     {% if not method.is_static %}

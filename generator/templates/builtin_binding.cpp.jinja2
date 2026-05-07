@@ -1,5 +1,6 @@
 #include "{{ header_include }}"
 #include "utils/func_utils.h"
+#include "utils/value_convert.h"
 {% if vararg_header_include %}
 #include "{{ vararg_header_include }}"
 {% endif %}
@@ -18,6 +19,9 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
         {% endfor %}
         InstanceMethod("toString", &{{ class_name }}Binding::_to_string),
         InstanceMethod(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), &{{ class_name }}Binding::_to_string),
+        {% if is_packed_array %}
+        InstanceMethod(Napi::Symbol::WellKnown(env, "iterator"), &{{ class_name }}Binding::_iterator),
+        {% endif %}
         {% for member in members %}
         InstanceAccessor("{{ member.name }}", &{{ class_name }}Binding::{{ member.getter }}, &{{ class_name }}Binding::{{ member.setter }}),
         {% endfor %}
@@ -60,6 +64,17 @@ Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) 
     godot::Variant v = instance;
     return Napi::String::New(info.Env(), v.stringify().utf8().get_data());
 }
+
+{% if is_packed_array %}
+Napi::Value {{ class_name }}Binding::_iterator(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::Array values = Napi::Array::New(env, static_cast<uint32_t>(instance.size()));
+    for (int64_t i = 0; i < instance.size(); i++) {
+        values.Set(static_cast<uint32_t>(i), gode::godot_to_napi(env, instance[i]));
+    }
+    return values.Get(Napi::Symbol::WellKnown(env, "iterator")).As<Napi::Function>().Call(values, {});
+}
+{% endif %}
 
 {% for method in methods %}
 Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackInfo& info) {

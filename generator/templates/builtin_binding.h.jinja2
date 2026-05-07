@@ -23,6 +23,9 @@ public:
 
     // ToString
     Napi::Value _to_string(const Napi::CallbackInfo& info);
+    {% if is_packed_array %}
+    Napi::Value _iterator(const Napi::CallbackInfo& info);
+    {% endif %}
 
     // Members
     {% for member in members %}
