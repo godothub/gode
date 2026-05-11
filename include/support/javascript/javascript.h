@@ -55,7 +55,7 @@ protected:
 public:
 	bool _editor_can_reload_from_file();
 	void _placeholder_erased(void *p_placeholder);
-	bool _can_instantiate() const;
+	virtual bool _can_instantiate() const;
 	godot::Ref<godot::Script> _get_base_script() const;
 	godot::StringName _get_global_name() const;
 	bool _inherits_script(const godot::Ref<godot::Script> &p_script) const;

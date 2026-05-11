@@ -1,7 +1,10 @@
 #ifndef GODOT_GODE_JAVASCRIPT_LANGUAGE_H
 #define GODOT_GODE_JAVASCRIPT_LANGUAGE_H
 
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/script_language_extension.hpp>
+#include <string>
+#include <vector>
 
 namespace gode {
 
@@ -11,9 +14,21 @@ class JavascriptLanguage : public godot::ScriptLanguageExtension {
 public:
 	~JavascriptLanguage();
 	static JavascriptLanguage *get_singleton();
+	static void report_exception(const godot::String &p_error, const godot::String &p_stack);
+	static void clear_exception();
 
 private:
 	static JavascriptLanguage *singleton;
+
+	struct DebugFrame {
+		std::string function;
+		std::string source;
+		int32_t line = -1;
+		int32_t column = -1;
+	};
+
+	static std::string last_error;
+	static std::vector<DebugFrame> last_stack;
 
 protected:
 	static void _bind_methods();
