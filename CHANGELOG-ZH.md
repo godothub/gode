@@ -1,3 +1,18 @@
+## 1.7.0
+
+- 增加 TypeScript decorator 元数据支持，可用 `@Export`、`@Signal`、`@Rpc`、`@Tool` 和 `@GlobalClass` 声明面向 Godot 的脚本信息。
+- 增加 TypeScript Inspector 辅助 decorator，覆盖分组、分类、范围、枚举、flags、文件、目录、多行字符串、节点路径和资源类型导出。
+- 改进生成的 TypeScript 声明，补充信号属性、信号回调辅助类型、集合别名和 decorator 重载。
+- 改进 JavaScript/TypeScript 全局类发现，脚本语言和资源 loader 都会报告命名类信息。
+- 加固 JavaScript 实例和 Callable 生命周期，处理已释放实例、空 JS 引用以及信号 Callable 中的异步 Promise rejection。
+- 增加运行时空操作 decorator 全局函数，使 TypeScript 编译产物中保留的 decorator helper 调用不需要项目侧额外 shim。
+- 修复 TypeScript 元数据解析中表达式求值缺少 V8 handle scope 的问题。
+- 改进编辑器和调试器集成，补充脚本模板、语法校验结果、回调函数生成、基础补全/查找数据、脚本重载入口，并将 JavaScript 异常堆栈暴露给 Godot 脚本调试接口。
+- 优化 JavaScript/Godot 互操作热路径：缓存脚本实例中的名称转换和嵌套属性路径，缓存 Godot 类到 wrapper 的解析结果，并让不需要默认参数的生成绑定调用避开临时参数 vector。
+- 修复脚本实例集成边界问题：为非 `RefCounted` owner 保护 refcount 回调，返回准确的属性类型和属性状态，让 fallback handler 正确报告未处理属性，并要求 TypeScript 存在已编译 JavaScript 输出后才报告可实例化。
+- 增加 JavaScript 和 TypeScript 依赖扫描，识别静态 `preload()`、`load()`、`ResourceLoader.load()`、`require()` 和 `import` 路径，改善编辑器和导出的依赖追踪。
+- 将 Godot 对象 wrapper 缓存改为弱 N-API 引用，降低 wrapper 缓存带来的内存压力。
+
 ## 1.6.3
 
 - 修复 Godot 回调 JavaScript 脚本实例时的参数转换：先复制传入的 Variant 指针数组再调用 JS 方法，避免高频回调中出现不稳定的 native 崩溃。

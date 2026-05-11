@@ -391,21 +391,30 @@ res://ui/main_menu.ts          -> res://dist/ui/main_menu.js
 res://systems/save_state.ts    -> res://dist/systems/save_state.js
 ```
 
-脚本元数据继续写在默认导出的 TypeScript 类上，和 JavaScript 写法一致。`signals`、`rpc_config`、`exports`、`tool` 这些静态字段会保留到编译后的输出中：
+TypeScript 脚本可以使用 decorator 声明常见的 Godot 元数据。Gode 会从 `.ts` 源码静态读取这些 decorator，并向 Godot 报告和 JavaScript `static exports`、`static signals`、`static rpc_config`、`static tool` 相同的元数据：
 
 ```ts
-import { Node } from "godot";
+import { CharacterBody3D } from "godot";
 
-export default class Player extends Node {
-	static signals = {
-		died: [],
-	};
+@Tool
+@GlobalClass("Player")
+export default class Player extends CharacterBody3D {
+	@Export({ type: "float", hint: 1, hintString: "0,20,0.1" })
+	speed = 8.0;
 
-	static rpc_config = {
-		hit: { mode: "authority", call_local: true },
-	};
+	@Signal([{ name: "amount", type: "int" }])
+	damaged!: Signal<(amount: number) => void>;
+
+	@Rpc({ mode: "any_peer", transferMode: "reliable", callLocal: true })
+	take_damage(amount: number): void {
+		this.emit_signal("damaged", amount);
+	}
 }
 ```
+
+简单导出也可以写成 `@Export("float")`；RPC 如果偏好位置参数，也可以写 `@Rpc("any_peer", "reliable", true, 0)`。Inspector 辅助 decorator 也对齐了 C# 中常用的导出属性：`@ExportCategory`、`@ExportGroup`、`@ExportSubgroup`、`@ExportRange`、`@ExportEnum`、`@ExportFlags`、`@ExportFile`、`@ExportDir`、`@ExportMultiline`、`@ExportColorNoAlpha`、`@ExportNodePath` 和 `@ExportResource`。
+
+这些 decorator 函数在运行时是空操作，真正的元数据来自 Gode 对源码的静态解析，因此即使 TypeScript 编译后输出普通 JavaScript，也要保留源码中的 decorator。
 
 TypeScript 源码中的本地相对导入，建议直接写运行时需要的 `.js` 后缀，这样编译后的文件可以被 Node/V8 直接加载：
 

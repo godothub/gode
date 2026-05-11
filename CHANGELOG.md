@@ -1,3 +1,18 @@
+## 1.7.0
+
+- Added TypeScript decorator metadata for Godot-facing declarations: `@Export`, `@Signal`, `@Rpc`, `@Tool`, and `@GlobalClass`.
+- Added TypeScript Inspector decorator helpers for groups, categories, ranges, enums, flags, files, directories, multiline strings, node paths, and resource-typed exports.
+- Improved generated TypeScript declarations for signal properties, signal callback helpers, collection aliases, and decorator overloads.
+- Improved JavaScript/TypeScript global class discovery by reporting named classes from script languages and resource loaders.
+- Hardened JavaScript instance and callable lifetimes against disposed instances, empty JS references, and asynchronous Promise rejections from signal callables.
+- Added runtime no-op decorator globals so TypeScript output that calls decorator helpers can load without requiring project-side shims.
+- Fixed V8 handle scope setup for expression evaluation used by TypeScript metadata parsing.
+- Improved editor and debugger integration with script templates, syntax validation results, callback generation, basic completion/lookup data, script reload hooks, and JavaScript exception stack frames exposed through Godot's script debugger API.
+- Optimized hot JavaScript/Godot interop paths by caching script instance name conversions and nested property paths, caching Godot class wrapper resolution, and avoiding temporary argument vectors for generated binding calls that do not need default arguments.
+- Fixed script instance integration edge cases by guarding refcount callbacks for non-`RefCounted` owners, returning accurate property types and property state, making fallback handlers report unhandled properties correctly, and requiring compiled JavaScript output before TypeScript scripts report themselves as instantiable.
+- Added JavaScript and TypeScript dependency scanning for static `preload()`, `load()`, `ResourceLoader.load()`, `require()`, and `import` paths, improving editor/export dependency tracking.
+- Reduced wrapper cache memory pressure by storing cached Godot object wrappers as weak N-API references.
+
 ## 1.6.3
 
 - Fixed JavaScript script instance argument marshaling from Godot callbacks by copying the incoming Variant pointer array before calling JS methods, preventing unstable native crashes in high-frequency callbacks.

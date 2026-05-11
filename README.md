@@ -391,21 +391,30 @@ res://ui/main_menu.ts          -> res://dist/ui/main_menu.js
 res://systems/save_state.ts    -> res://dist/systems/save_state.js
 ```
 
-Keep script metadata on the exported TypeScript class the same way you would in JavaScript. Static fields such as `signals`, `rpc_config`, `exports`, and `tool` are preserved in the compiled output:
+TypeScript scripts can use decorator metadata for the common Godot-facing declarations. Gode reads these decorators from the `.ts` source and reports the same metadata as JavaScript `static exports`, `static signals`, `static rpc_config`, and `static tool`:
 
 ```ts
-import { Node } from "godot";
+import { CharacterBody3D } from "godot";
 
-export default class Player extends Node {
-	static signals = {
-		died: [],
-	};
+@Tool
+@GlobalClass("Player")
+export default class Player extends CharacterBody3D {
+	@Export({ type: "float", hint: 1, hintString: "0,20,0.1" })
+	speed = 8.0;
 
-	static rpc_config = {
-		hit: { mode: "authority", call_local: true },
-	};
+	@Signal([{ name: "amount", type: "int" }])
+	damaged!: Signal<(amount: number) => void>;
+
+	@Rpc({ mode: "any_peer", transferMode: "reliable", callLocal: true })
+	take_damage(amount: number): void {
+		this.emit_signal("damaged", amount);
+	}
 }
 ```
+
+`@Export("float")` is also accepted for simple typed exports, and `@Rpc("any_peer", "reliable", true, 0)` is accepted when you prefer positional RPC arguments. Inspector helpers mirror common C# export attributes: `@ExportCategory`, `@ExportGroup`, `@ExportSubgroup`, `@ExportRange`, `@ExportEnum`, `@ExportFlags`, `@ExportFile`, `@ExportDir`, `@ExportMultiline`, `@ExportColorNoAlpha`, `@ExportNodePath`, and `@ExportResource`.
+
+The decorator functions are runtime no-ops; the metadata comes from static parsing, so keep the decorators in source even if your TypeScript compiler emits plain JavaScript.
 
 For local imports in TypeScript source, prefer the runtime JavaScript extension so the emitted file can be loaded directly by Node/V8:
 
