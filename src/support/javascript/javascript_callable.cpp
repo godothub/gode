@@ -1,77 +1,13 @@
 #include "support/javascript/javascript_callable.h"
 
-#include "support/javascript/javascript_language.h"
 #include "utils/node_runtime.h"
 #include "utils/value_convert.h"
 
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <v8-isolate.h>
 #include <v8-locker.h>
-#include <string>
 
 namespace gode {
-
-namespace {
-
-std::string js_error_to_string(Napi::Value value) {
-	try {
-		if (value.IsObject()) {
-			Napi::Object obj = value.As<Napi::Object>();
-			if (obj.Has("stack")) {
-				Napi::Value stack = obj.Get("stack");
-				if (!stack.IsNull() && !stack.IsUndefined()) {
-					return stack.ToString().Utf8Value();
-				}
-			}
-			if (obj.Has("message")) {
-				Napi::Value message = obj.Get("message");
-				if (!message.IsNull() && !message.IsUndefined()) {
-					return message.ToString().Utf8Value();
-				}
-			}
-		}
-		if (!value.IsNull() && !value.IsUndefined()) {
-			return value.ToString().Utf8Value();
-		}
-	} catch (...) {
-	}
-	return "Unknown async JavaScript exception";
-}
-
-void attach_callable_rejection_handler(Napi::Value value) {
-	if (!value.IsPromise()) {
-		return;
-	}
-
-	Napi::Env env = value.Env();
-	Napi::Function on_rejected = Napi::Function::New(env, [](const Napi::CallbackInfo &info) {
-		std::string message = info.Length() > 0 ? js_error_to_string(info[0]) : "Unknown async JavaScript exception";
-		JavascriptLanguage::report_exception(godot::String(message.c_str()), godot::String(message.c_str()));
-		godot::UtilityFunctions::printerr("Async JS Exception in Callable: ", message.c_str());
-		return info.Env().Undefined();
-	}, "__gode_callable_async_rejection_handler");
-
-	value.As<Napi::Promise>().Catch(on_rejected);
-}
-
-godot::String napi_error_stack(const Napi::Error &p_error) {
-	try {
-		Napi::Value value = p_error.Value();
-		if (value.IsObject()) {
-			Napi::Object obj = value.As<Napi::Object>();
-			if (obj.Has("stack")) {
-				Napi::Value stack = obj.Get("stack");
-				if (!stack.IsNull() && !stack.IsUndefined()) {
-					return godot::String(stack.ToString().Utf8Value().c_str());
-				}
-			}
-		}
-	} catch (...) {
-	}
-	return godot::String(p_error.Message().c_str());
-}
-
-} // namespace
 
 JavascriptCallable::JavascriptCallable(Napi::Function p_function) {
 	func_ref = Napi::Persistent(p_function);
@@ -139,16 +75,10 @@ void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount
 
 	try {
 		Napi::Value result = func.Call(env.Global(), args);
-		if (result.IsPromise()) {
-			attach_callable_rejection_handler(result);
-			r_return_value = godot::Variant();
-		} else {
-			r_return_value = napi_to_godot(result);
-		}
+		r_return_value = napi_to_godot(result);
 		r_call_error.error = GDEXTENSION_CALL_OK;
 		NodeRuntime::isolate->PerformMicrotaskCheckpoint();
 	} catch (const Napi::Error &e) {
-		JavascriptLanguage::report_exception(godot::String(e.Message().c_str()), napi_error_stack(e));
 		godot::UtilityFunctions::printerr("JS Exception in Callable: ", e.Message().c_str());
 		r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 	}

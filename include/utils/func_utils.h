@@ -14,16 +14,10 @@ namespace gode {
 inline std::vector<Napi::Value> to_args_array(const Napi::CallbackInfo &info) {
 	std::size_t argc = info.Length();
 	std::vector<Napi::Value> args;
-	args.reserve(argc);
 	for (std::size_t i = 0; i < argc; ++i) {
 		args.push_back(info[i]);
 	}
 	return args;
-}
-
-template <std::size_t I>
-inline Napi::Value callback_arg_or_undefined(const Napi::CallbackInfo &info) {
-	return I < info.Length() ? info[I] : info.Env().Undefined();
 }
 
 inline void apply_default_args(std::vector<Napi::Value> &args, std::size_t target_count, const std::vector<Napi::Value> &default_args, Napi::Env env) {
@@ -38,7 +32,7 @@ inline void apply_default_args(std::vector<Napi::Value> &args, std::size_t targe
 
 // Helper: Static Method Implementation
 template <typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (*Func)(P...), Napi::Env env, const std::vector<Napi::Value> &args, std::index_sequence<Is...>) {
+inline Napi::Value call_builtin_method_impl(R (*Func)(P...), Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
 	if constexpr (std::is_void_v<R>) {
 		Func(napi_to_godot<P>(args[Is])...);
 		return env.Undefined();
@@ -47,62 +41,36 @@ inline Napi::Value call_builtin_method_impl(R (*Func)(P...), Napi::Env env, cons
 	}
 }
 
-template <typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (*Func)(P...), const Napi::CallbackInfo &info, std::index_sequence<Is...>) {
-	if constexpr (std::is_void_v<R>) {
-		Func(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...);
-		return info.Env().Undefined();
-	} else {
-		return godot_to_napi(info.Env(), Func(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...));
-	}
-}
-
 // Helper: Instance Method Implementation (Non-Const)
 template <typename T, typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...), T *instance, Napi::Env env, const std::vector<Napi::Value> &args, std::index_sequence<Is...>) {
+inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...), T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
 	if constexpr (std::is_void_v<R>) {
 		(instance->*Func)(napi_to_godot<P>(args[Is])...);
 		return env.Undefined();
 	} else {
 		return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
-	}
-}
-
-template <typename T, typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info, std::index_sequence<Is...>) {
-	if constexpr (std::is_void_v<R>) {
-		(instance->*Func)(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...);
-		return info.Env().Undefined();
-	} else {
-		return godot_to_napi(info.Env(), (instance->*Func)(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...));
 	}
 }
 
 // Helper: Instance Method Implementation (Const)
 template <typename T, typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...) const, T *instance, Napi::Env env, const std::vector<Napi::Value> &args, std::index_sequence<Is...>) {
+inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...) const, T *instance, Napi::Env env, std::vector<Napi::Value> args, std::index_sequence<Is...>) {
 	if constexpr (std::is_void_v<R>) {
 		(instance->*Func)(napi_to_godot<P>(args[Is])...);
 		return env.Undefined();
 	} else {
 		return godot_to_napi(env, (instance->*Func)(napi_to_godot<P>(args[Is])...));
-	}
-}
-
-template <typename T, typename R, typename... P, std::size_t... Is>
-inline Napi::Value call_builtin_method_impl(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info, std::index_sequence<Is...>) {
-	if constexpr (std::is_void_v<R>) {
-		(instance->*Func)(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...);
-		return info.Env().Undefined();
-	} else {
-		return godot_to_napi(info.Env(), (instance->*Func)(napi_to_godot<P>(callback_arg_or_undefined<Is>(info))...));
 	}
 }
 
 // 1. Static Method (Regular)
 template <typename R, typename... P>
 inline Napi::Value call_builtin_method(R (*Func)(P...), const Napi::CallbackInfo &info) {
-	return call_builtin_method_impl(Func, info, std::make_index_sequence<sizeof...(P)>());
+	std::vector<Napi::Value> args = to_args_array(info);
+	if (args.size() < sizeof...(P)) {
+		args.resize(sizeof...(P), info.Env().Undefined());
+	}
+	return call_builtin_method_impl(Func, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
 template <typename R, typename... P>
@@ -202,7 +170,11 @@ inline Napi::Value call_builtin_method(R (*Func)(T *, const godot::Variant **, G
 // 6. Instance Method (Regular Non-Const)
 template <typename T, typename R, typename... P>
 inline Napi::Value call_builtin_method(R (T::*Func)(P...), T *instance, const Napi::CallbackInfo &info) {
-	return call_builtin_method_impl(Func, instance, info, std::make_index_sequence<sizeof...(P)>());
+	std::vector<Napi::Value> args = to_args_array(info);
+	if (args.size() < sizeof...(P)) {
+		args.resize(sizeof...(P), info.Env().Undefined());
+	}
+	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
 template <typename T, typename R, typename... P>
@@ -215,7 +187,11 @@ inline Napi::Value call_builtin_method(R (T::*Func)(P...), T *instance, const Na
 // 7. Instance Method (Regular Const)
 template <typename T, typename R, typename... P>
 inline Napi::Value call_builtin_method(R (T::*Func)(P...) const, T *instance, const Napi::CallbackInfo &info) {
-	return call_builtin_method_impl(Func, instance, info, std::make_index_sequence<sizeof...(P)>());
+	std::vector<Napi::Value> args = to_args_array(info);
+	if (args.size() < sizeof...(P)) {
+		args.resize(sizeof...(P), info.Env().Undefined());
+	}
+	return call_builtin_method_impl(Func, instance, info.Env(), args, std::make_index_sequence<sizeof...(P)>());
 }
 
 template <typename T, typename R, typename... P>
