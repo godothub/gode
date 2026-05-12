@@ -869,20 +869,6 @@ TypedArray<Dictionary> Javascript::_get_script_method_list() const {
 TypedArray<Dictionary> Javascript::_get_script_property_list() const {
 	compile();
 	TypedArray<Dictionary> list;
-	const Vector<PropertyInfo> &ordered = property_list;
-	if (!ordered.is_empty()) {
-		for (const PropertyInfo &pi : ordered) {
-			Dictionary d;
-			d["name"] = String(pi.name);
-			d["class_name"] = String(pi.class_name);
-			d["type"] = (int)pi.type;
-			d["hint"] = (int)pi.hint;
-			d["hint_string"] = pi.hint_string;
-			d["usage"] = (int)pi.usage;
-			list.push_back(d);
-		}
-		return list;
-	}
 	for (const KeyValue<StringName, PropertyInfo> &kv : properties) {
 		const PropertyInfo &pi = kv.value;
 		Dictionary d;
