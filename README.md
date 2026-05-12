@@ -100,7 +100,7 @@ TypeScript scripts are compiled to matching JavaScript files under `res://dist`.
 		"rootDir": ".",
 		"outDir": "dist",
 		"paths": {
-			"godot": ["addons/gode/types/godot.d.ts"]
+			"godot": ["./addons/gode/types/godot.d.ts"]
 		},
 		"types": ["node"]
 	},
