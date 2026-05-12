@@ -8,81 +8,11 @@
 #include <v8-locker.h>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
-#include <cctype>
-#include <cstdlib>
 
 using namespace godot;
 using namespace gode;
 
 extern "C" const TSLanguage *tree_sitter_typescript();
-
-static std::string node_text(const std::string &source, TSNode node) {
-	if (ts_node_is_null(node)) {
-		return std::string();
-	}
-	uint32_t start = ts_node_start_byte(node);
-	uint32_t end = ts_node_end_byte(node);
-	return source.substr(start, end - start);
-}
-
-static std::string trim_text(std::string text) {
-	size_t start = 0;
-	while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start]))) {
-		start++;
-	}
-	size_t end = text.size();
-	while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
-		end--;
-	}
-	return text.substr(start, end - start);
-}
-
-static std::string strip_quotes(std::string text) {
-	text = trim_text(text);
-	if (text.size() >= 2 && ((text.front() == '"' && text.back() == '"') || (text.front() == '\'' && text.back() == '\''))) {
-		return text.substr(1, text.size() - 2);
-	}
-	return text;
-}
-
-static bool parse_bool_text(const std::string &text) {
-	std::string value = strip_quotes(text);
-	return value == "true" || value == "True" || value == "1";
-}
-
-static std::string decorator_name(const std::string &decorator_text) {
-	std::string text = trim_text(decorator_text);
-	if (!text.empty() && text[0] == '@') {
-		text = text.substr(1);
-	}
-	size_t end = 0;
-	while (end < text.size()) {
-		unsigned char c = static_cast<unsigned char>(text[end]);
-		if (!(std::isalnum(c) || c == '_' || c == '$')) {
-			break;
-		}
-		end++;
-	}
-	return text.substr(0, end);
-}
-
-static TSNode decorator_arguments(TSNode decorator_node) {
-	for (uint32_t i = 0; i < ts_node_named_child_count(decorator_node); i++) {
-		TSNode expr = ts_node_named_child(decorator_node, i);
-		TSNode args = ts_node_child_by_field_name(expr, "arguments", 9);
-		if (!ts_node_is_null(args)) {
-			return args;
-		}
-		for (uint32_t j = 0; j < ts_node_named_child_count(expr); j++) {
-			TSNode child = ts_node_named_child(expr, j);
-			args = ts_node_child_by_field_name(child, "arguments", 9);
-			if (!ts_node_is_null(args)) {
-				return args;
-			}
-		}
-	}
-	return {};
-}
 
 static Variant::Type parse_type_string(const std::string &type_str) {
 	if (type_str == "bool" || type_str == "boolean") {
@@ -116,175 +46,6 @@ static Variant::Type parse_type_string(const std::string &type_str) {
 		return Variant::NODE_PATH;
 	}
 	return Variant::NIL;
-}
-
-static int parse_rpc_mode(const std::string &mode) {
-	std::string value = strip_quotes(mode);
-	if (value == "any_peer" || value == "any" || value == "AnyPeer") return 1;
-	if (value == "authority" || value == "master" || value == "Authority") return 2;
-	if (value == "disabled" || value == "Disabled") return 0;
-	return std::atoi(value.c_str());
-}
-
-static int parse_transfer_mode(const std::string &mode) {
-	std::string value = strip_quotes(mode);
-	if (value == "unreliable" || value == "Unreliable") return 0;
-	if (value == "unreliable_ordered" || value == "UnreliableOrdered") return 1;
-	if (value == "reliable" || value == "Reliable") return 2;
-	return std::atoi(value.c_str());
-}
-
-static void parse_signal_argument(TSNode arg_node, const std::string &source, MethodInfo &method) {
-	PropertyInfo arg;
-	arg.type = Variant::NIL;
-	arg.usage = PROPERTY_USAGE_DEFAULT;
-	arg.hint = PROPERTY_HINT_NONE;
-
-	if (strcmp(ts_node_type(arg_node), "string") == 0) {
-		arg.name = StringName(strip_quotes(node_text(source, arg_node)).c_str());
-		method.arguments.push_back(arg);
-		return;
-	}
-
-	if (strcmp(ts_node_type(arg_node), "object") != 0) {
-		return;
-	}
-
-	for (uint32_t i = 0; i < ts_node_named_child_count(arg_node); i++) {
-		TSNode pair = ts_node_named_child(arg_node, i);
-		if (strcmp(ts_node_type(pair), "pair") != 0) {
-			continue;
-		}
-
-		std::string key = strip_quotes(node_text(source, ts_node_child_by_field_name(pair, "key", 3)));
-		TSNode value = ts_node_child_by_field_name(pair, "value", 5);
-		if (key == "name") {
-			arg.name = StringName(strip_quotes(node_text(source, value)).c_str());
-		} else if (key == "type") {
-			arg.type = parse_type_string(strip_quotes(node_text(source, value)));
-		}
-	}
-
-	method.arguments.push_back(arg);
-}
-
-static void parse_signal_arguments(TSNode args_node, const std::string &source, MethodInfo &method) {
-	if (ts_node_is_null(args_node) || ts_node_named_child_count(args_node) == 0) {
-		return;
-	}
-
-	TSNode first_arg = ts_node_named_child(args_node, 0);
-	if (strcmp(ts_node_type(first_arg), "array") == 0) {
-		for (uint32_t i = 0; i < ts_node_named_child_count(first_arg); i++) {
-			parse_signal_argument(ts_node_named_child(first_arg, i), source, method);
-		}
-		return;
-	}
-
-	if (strcmp(ts_node_type(first_arg), "object") == 0) {
-		for (uint32_t i = 0; i < ts_node_named_child_count(first_arg); i++) {
-			TSNode pair = ts_node_named_child(first_arg, i);
-			if (strcmp(ts_node_type(pair), "pair") != 0) {
-				continue;
-			}
-			std::string key = strip_quotes(node_text(source, ts_node_child_by_field_name(pair, "key", 3)));
-			TSNode value = ts_node_child_by_field_name(pair, "value", 5);
-			if (key == "args" && strcmp(ts_node_type(value), "array") == 0) {
-				for (uint32_t j = 0; j < ts_node_named_child_count(value); j++) {
-					parse_signal_argument(ts_node_named_child(value, j), source, method);
-				}
-				return;
-			}
-		}
-	}
-}
-
-static String join_decorator_arg_text(TSNode args_node, const std::string &source, uint32_t start_index = 0, const char *separator = ",") {
-	String result;
-	if (ts_node_is_null(args_node)) {
-		return result;
-	}
-	for (uint32_t i = start_index; i < ts_node_named_child_count(args_node); i++) {
-		if (!result.is_empty()) {
-			result += separator;
-		}
-		result += String(strip_quotes(node_text(source, ts_node_named_child(args_node, i))).c_str());
-	}
-	return result;
-}
-
-static String array_decorator_arg_text(TSNode node, const std::string &source) {
-	if (ts_node_is_null(node)) {
-		return String();
-	}
-	if (strcmp(ts_node_type(node), "array") == 0) {
-		String result;
-		for (uint32_t i = 0; i < ts_node_named_child_count(node); i++) {
-			if (!result.is_empty()) {
-				result += ",";
-			}
-			result += String(strip_quotes(node_text(source, ts_node_named_child(node, i))).c_str());
-		}
-		return result;
-	}
-	return String(strip_quotes(node_text(source, node)).c_str());
-}
-
-static void append_inspector_group(Vector<PropertyInfo> &property_list, const StringName &name, PropertyUsageFlags usage, const String &prefix = String()) {
-	PropertyInfo group;
-	group.name = name;
-	group.type = Variant::NIL;
-	group.hint = PROPERTY_HINT_NONE;
-	group.hint_string = prefix;
-	group.usage = usage;
-	property_list.push_back(group);
-}
-
-static Dictionary parse_rpc_arguments(TSNode args_node, const std::string &source) {
-	Dictionary cfg;
-	cfg["rpc_mode"] = 2;
-	cfg["transfer_mode"] = 2;
-	cfg["call_local"] = false;
-	cfg["channel"] = 0;
-
-	if (ts_node_is_null(args_node) || ts_node_named_child_count(args_node) == 0) {
-		return cfg;
-	}
-
-	TSNode first_arg = ts_node_named_child(args_node, 0);
-	if (strcmp(ts_node_type(first_arg), "object") == 0) {
-		for (uint32_t i = 0; i < ts_node_named_child_count(first_arg); i++) {
-			TSNode pair = ts_node_named_child(first_arg, i);
-			if (strcmp(ts_node_type(pair), "pair") != 0) {
-				continue;
-			}
-			std::string key = strip_quotes(node_text(source, ts_node_child_by_field_name(pair, "key", 3)));
-			std::string value = node_text(source, ts_node_child_by_field_name(pair, "value", 5));
-			if (key == "rpc_mode" || key == "mode") {
-				cfg["rpc_mode"] = parse_rpc_mode(value);
-			} else if (key == "transfer_mode" || key == "transferMode") {
-				cfg["transfer_mode"] = parse_transfer_mode(value);
-			} else if (key == "call_local" || key == "callLocal") {
-				cfg["call_local"] = parse_bool_text(value);
-			} else if (key == "channel") {
-				cfg["channel"] = std::atoi(strip_quotes(value).c_str());
-			}
-		}
-		return cfg;
-	}
-
-	cfg["rpc_mode"] = parse_rpc_mode(node_text(source, first_arg));
-	if (ts_node_named_child_count(args_node) >= 2) {
-		cfg["transfer_mode"] = parse_transfer_mode(node_text(source, ts_node_named_child(args_node, 1)));
-	}
-	if (ts_node_named_child_count(args_node) >= 3) {
-		cfg["call_local"] = parse_bool_text(node_text(source, ts_node_named_child(args_node, 2)));
-	}
-	if (ts_node_named_child_count(args_node) >= 4) {
-		cfg["channel"] = std::atoi(strip_quotes(node_text(source, ts_node_named_child(args_node, 3))).c_str());
-	}
-
-	return cfg;
 }
 
 static String get_js_path(const String &ts_path) {
@@ -643,8 +404,8 @@ static bool check_tool_decorator(TSNode root_node, uint32_t child_count, const s
 			if (strcmp(en_type, "decorator") == 0) {
 				uint32_t ds = ts_node_start_byte(en);
 				uint32_t de = ts_node_end_byte(en);
-				std::string deco = decorator_name(source.substr(ds, de - ds));
-				if (deco == "Tool" || deco == "tool") {
+				std::string deco = source.substr(ds, de - ds);
+				if (deco == "@Tool" || deco == "@tool") {
 					return true;
 				}
 			}
@@ -655,8 +416,8 @@ static bool check_tool_decorator(TSNode root_node, uint32_t child_count, const s
 					if (strcmp(ts_node_type(cn), "decorator") == 0) {
 						uint32_t ds = ts_node_start_byte(cn);
 						uint32_t de = ts_node_end_byte(cn);
-						std::string deco = decorator_name(source.substr(ds, de - ds));
-						if (deco == "Tool" || deco == "tool") {
+						std::string deco = source.substr(ds, de - ds);
+						if (deco == "@Tool" || deco == "@tool") {
 							return true;
 						}
 					}
@@ -695,21 +456,6 @@ static void parse_class_metadata(TSNode class_node, const std::string &source, S
 
 	for (uint32_t j = 0; j < ts_node_child_count(class_node); j++) {
 		TSNode cn = ts_node_child(class_node, j);
-		if (strcmp(ts_node_type(cn), "decorator") != 0) {
-			continue;
-		}
-		std::string name = decorator_name(node_text(source, cn));
-		if (name != "GlobalClass" && name != "globalClass") {
-			continue;
-		}
-		TSNode args = decorator_arguments(cn);
-		if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-			class_name = StringName(strip_quotes(node_text(source, ts_node_named_child(args, 0))).c_str());
-		}
-	}
-
-	for (uint32_t j = 0; j < ts_node_child_count(class_node); j++) {
-		TSNode cn = ts_node_child(class_node, j);
 		cn = ts_node_named_child(cn, 0);
 		if (!ts_node_is_null(cn) && strcmp(ts_node_type(cn), "extends_clause") == 0) {
 			for (uint32_t k = 0; k < ts_node_child_count(cn); k++) {
@@ -721,42 +467,6 @@ static void parse_class_metadata(TSNode class_node, const std::string &source, S
 					return;
 				}
 			}
-		}
-	}
-}
-
-static void parse_global_class_decorator(TSNode root_node, uint32_t child_count, const std::string &source, StringName &class_name) {
-	for (uint32_t i = 0; i < child_count; i++) {
-		TSNode child = ts_node_child(root_node, i);
-		if (strcmp(ts_node_type(child), "export_statement") != 0) {
-			continue;
-		}
-
-		bool is_default_export = false;
-		for (uint32_t j = 0; j < ts_node_child_count(child); j++) {
-			if (strcmp(ts_node_type(ts_node_child(child, j)), "default") == 0) {
-				is_default_export = true;
-				break;
-			}
-		}
-		if (!is_default_export) {
-			continue;
-		}
-
-		for (uint32_t j = 0; j < ts_node_child_count(child); j++) {
-			TSNode decorator = ts_node_child(child, j);
-			if (strcmp(ts_node_type(decorator), "decorator") != 0) {
-				continue;
-			}
-			std::string name = decorator_name(node_text(source, decorator));
-			if (name != "GlobalClass" && name != "globalClass") {
-				continue;
-			}
-			TSNode args = decorator_arguments(decorator);
-			if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-				class_name = StringName(strip_quotes(node_text(source, ts_node_named_child(args, 0))).c_str());
-			}
-			return;
 		}
 	}
 }
@@ -890,37 +600,21 @@ static void parse_method_params(TSNode method_node, const std::string &source, M
 	}
 }
 
-static void parse_class_members(TSNode class_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, Dictionary> &rpc_configs, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
+static void parse_class_members(TSNode class_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
 	TSNode body_node = ts_node_child_by_field_name(class_node, "body", 4);
 	if (ts_node_is_null(body_node)) {
 		return;
 	}
 
-	bool pending_rpc_decorator = false;
-	TSNode pending_rpc_args = { 0 };
-
 	for (uint32_t j = 0; j < ts_node_child_count(body_node); j++) {
 		TSNode member = ts_node_child(body_node, j);
 		const char *member_type = ts_node_type(member);
 
-		if (strcmp(member_type, "decorator") == 0) {
-			std::string name = decorator_name(node_text(source, member));
-			if (name == "Rpc" || name == "RPC" || name == "rpc") {
-				pending_rpc_decorator = true;
-				pending_rpc_args = decorator_arguments(member);
-			}
-			continue;
-		}
-
 		if (strcmp(member_type, "public_field_definition") == 0) {
 			// 扫描装饰器，检测 @Export 并解析其参数
 			bool has_export_decorator = false;
-			bool has_signal_decorator = false;
-			TSNode signal_args_node = { 0 };
 			PropertyHint export_hint = PROPERTY_HINT_NONE;
 			String export_hint_string;
-			StringName export_class_name;
-			Variant::Type export_type = Variant::NIL;
 			for (uint32_t k = 0; k < ts_node_child_count(member); k++) {
 				TSNode child = ts_node_child(member, k);
 				if (strcmp(ts_node_type(child), "decorator") != 0) {
@@ -929,89 +623,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 				uint32_t ds = ts_node_start_byte(child);
 				uint32_t de = ts_node_end_byte(child);
 				std::string deco_text = source.substr(ds, de - ds);
-				std::string deco_name = decorator_name(deco_text);
-				if (deco_name == "Signal" || deco_name == "signal") {
-					has_signal_decorator = true;
-					signal_args_node = decorator_arguments(child);
-					continue;
-				}
-				if (deco_name == "ExportCategory" || deco_name == "ExportGroup" || deco_name == "ExportSubgroup") {
-					TSNode args = decorator_arguments(child);
-					if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-						StringName group_name(strip_quotes(node_text(source, ts_node_named_child(args, 0))).c_str());
-						String prefix = ts_node_named_child_count(args) > 1 ? String(strip_quotes(node_text(source, ts_node_named_child(args, 1))).c_str()) : String();
-						PropertyUsageFlags usage = PROPERTY_USAGE_GROUP;
-						if (deco_name == "ExportCategory") {
-							usage = PROPERTY_USAGE_CATEGORY;
-						} else if (deco_name == "ExportSubgroup") {
-							usage = PROPERTY_USAGE_SUBGROUP;
-						}
-						append_inspector_group(property_list, group_name, usage, prefix);
-					}
-					continue;
-				}
-				if (deco_name != "Export" && deco_name != "export") {
-					TSNode args = decorator_arguments(child);
-					if (deco_name == "ExportRange") {
-						has_export_decorator = true;
-						export_type = Variant::FLOAT;
-						export_hint = PROPERTY_HINT_RANGE;
-						export_hint_string = join_decorator_arg_text(args, source);
-						continue;
-					}
-					if (deco_name == "ExportEnum" || deco_name == "ExportFlags") {
-						has_export_decorator = true;
-						export_type = Variant::INT;
-						export_hint = deco_name == "ExportFlags" ? PROPERTY_HINT_FLAGS : PROPERTY_HINT_ENUM;
-						if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-							export_hint_string = array_decorator_arg_text(ts_node_named_child(args, 0), source);
-						}
-						continue;
-					}
-					if (deco_name == "ExportFile" || deco_name == "ExportDir") {
-						has_export_decorator = true;
-						export_type = Variant::STRING;
-						export_hint = deco_name == "ExportDir" ? PROPERTY_HINT_DIR : PROPERTY_HINT_FILE;
-						if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-							export_hint_string = String(strip_quotes(node_text(source, ts_node_named_child(args, 0))).c_str());
-						}
-						continue;
-					}
-					if (deco_name == "ExportMultiline") {
-						has_export_decorator = true;
-						export_type = Variant::STRING;
-						export_hint = PROPERTY_HINT_MULTILINE_TEXT;
-						continue;
-					}
-					if (deco_name == "ExportColorNoAlpha") {
-						has_export_decorator = true;
-						export_type = Variant::COLOR;
-						export_hint = PROPERTY_HINT_COLOR_NO_ALPHA;
-						continue;
-					}
-					if (deco_name == "ExportNodePath") {
-						has_export_decorator = true;
-						export_type = Variant::NODE_PATH;
-						export_hint = PROPERTY_HINT_NODE_PATH_VALID_TYPES;
-						if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-							export_hint_string = array_decorator_arg_text(ts_node_named_child(args, 0), source);
-						}
-						continue;
-					}
-					if (deco_name == "ExportResource") {
-						has_export_decorator = true;
-						export_type = Variant::OBJECT;
-						export_hint = PROPERTY_HINT_RESOURCE_TYPE;
-						if (!ts_node_is_null(args) && ts_node_named_child_count(args) > 0) {
-							std::string resource_type = strip_quotes(node_text(source, ts_node_named_child(args, 0)));
-							export_hint_string = String(resource_type.c_str());
-							export_class_name = StringName(resource_type.c_str());
-						} else {
-							export_hint_string = "Resource";
-							export_class_name = StringName("Resource");
-						}
-						continue;
-					}
+				if (deco_text.find("@Export") != 0) {
 					continue;
 				}
 				has_export_decorator = true;
@@ -1044,24 +656,17 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 							uint32_t vs_b = ts_node_start_byte(val);
 							uint32_t ve_b = ts_node_end_byte(val);
 							std::string val_str = source.substr(vs_b, ve_b - vs_b);
-							key_str = strip_quotes(key_str);
-							if (key_str == "type") {
-								export_type = parse_type_string(strip_quotes(val_str));
-							} else if (key_str == "className" || key_str == "class_name") {
-								export_class_name = StringName(strip_quotes(val_str).c_str());
-							} else if (key_str == "hint") {
+							if (key_str == "hint") {
 								Variant v = NodeRuntime::eval_expression(val_str);
 								if (v.get_type() != Variant::NIL) {
 									export_hint = (PropertyHint)(int)v;
 								}
-							} else if (key_str == "hintString" || key_str == "hint_string") {
+							} else if (key_str == "hintString") {
 								if (val_str.size() >= 2 && (val_str.front() == '"' || val_str.front() == '\'')) {
 									export_hint_string = String(val_str.substr(1, val_str.size() - 2).c_str());
 								}
 							}
 						}
-					} else if (strcmp(first_type, "string") == 0) {
-						export_type = parse_type_string(strip_quotes(node_text(source, first_arg)));
 					} else {
 						// @Export(hint) 或 @Export(hint, "hintString")
 						uint32_t vs_b = ts_node_start_byte(first_arg);
@@ -1085,7 +690,6 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 					break;
 				}
 			}
-			pending_rpc_decorator = false;
 
 			// Signal<T> 类型注解：检测 fieldName!: Signal<(...) => void> 形式
 			TSNode type_anno = ts_node_child_by_field_name(member, "type", 4);
@@ -1124,18 +728,6 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 				}
 			}
 
-			if (has_signal_decorator) {
-				TSNode name_node = ts_node_child_by_field_name(member, "name", 4);
-				if (!ts_node_is_null(name_node)) {
-					StringName signal_name(node_text(source, name_node).c_str());
-					MethodInfo mi;
-					mi.name = signal_name;
-					parse_signal_arguments(signal_args_node, source, mi);
-					signals[signal_name] = mi;
-				}
-				continue;
-			}
-
 			if (!has_export_decorator) {
 				continue;
 			}
@@ -1157,8 +749,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 			pi.usage = PROPERTY_USAGE_DEFAULT;
 			pi.hint = export_hint;
 			pi.hint_string = export_hint_string;
-			pi.type = export_type;
-			pi.class_name = export_class_name;
+			pi.type = Variant::NIL;
 
 			std::string type_str;
 			if (!ts_node_is_null(field_type_node)) {
@@ -1167,10 +758,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 					uint32_t ts = ts_node_start_byte(inner_type);
 					uint32_t te = ts_node_end_byte(inner_type);
 					type_str = source.substr(ts, te - ts);
-					Variant::Type inferred_type = parse_type_string(type_str);
-					if (pi.type == Variant::NIL) {
-						pi.type = inferred_type;
-					}
+					pi.type = parse_type_string(type_str);
 				}
 			}
 
@@ -1239,21 +827,6 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 			parse_method_params(member, source, mi);
 			methods[method_name] = mi;
 			member_lines[method_name] = ts_node_start_point(member).row + 1;
-
-			if (pending_rpc_decorator) {
-				rpc_configs[method_name] = parse_rpc_arguments(pending_rpc_args, source);
-			}
-			for (uint32_t k = 0; k < ts_node_child_count(member); k++) {
-				TSNode child = ts_node_child(member, k);
-				if (strcmp(ts_node_type(child), "decorator") != 0) {
-					continue;
-				}
-				std::string name = decorator_name(node_text(source, child));
-				if (name == "Rpc" || name == "RPC" || name == "rpc") {
-					rpc_configs[method_name] = parse_rpc_arguments(decorator_arguments(child), source);
-				}
-			}
-			pending_rpc_decorator = false;
 		}
 	}
 }
@@ -1383,6 +956,11 @@ bool Typescript::compile() const {
 		return false;
 	}
 
+	String js_path = get_js_path(path);
+	if (!FileAccess::file_exists(js_path)) {
+		return false;
+	}
+
 	TSParser *parser = ts_parser_new();
 	ts_parser_set_language(parser, tree_sitter_typescript());
 
@@ -1395,7 +973,6 @@ bool Typescript::compile() const {
 	property_list.clear();
 	methods.clear();
 	signals.clear();
-	rpc_configs.clear();
 	properties.clear();
 	property_defaults.clear();
 	constants.clear();
@@ -1414,8 +991,7 @@ bool Typescript::compile() const {
 
 	HashMap<StringName, Vector<PropertyInfo>> interfaces = parse_interfaces(root_node, child_count, source, get_path());
 	parse_class_metadata(class_node, source, class_name, base_class_name);
-	parse_global_class_decorator(root_node, child_count, source, class_name);
-	parse_class_members(class_node, source, properties, property_list, property_defaults, methods, signals, rpc_configs, member_lines, interfaces);
+	parse_class_members(class_node, source, properties, property_list, property_defaults, methods, signals, member_lines, interfaces);
 	parse_static_exports(class_node, source, properties, property_defaults);
 	collect_parent_properties(base_class_name, source, root_node, child_count, get_path(), properties, property_defaults);
 
@@ -1456,10 +1032,6 @@ Napi::Function Typescript::get_default_class() const {
 	}
 
 	return Napi::Function();
-}
-
-bool Typescript::_can_instantiate() const {
-	return !get_default_class().IsEmpty();
 }
 
 ScriptLanguage *Typescript::_get_language() const {

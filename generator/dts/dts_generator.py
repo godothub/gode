@@ -300,14 +300,6 @@ class DtsGenerator(CodeGenerator):
             parts.append(f'{name}{opt}: {ts_type}')
         return ', '.join(parts)
 
-    def _format_signal_function_type(self, arguments: list) -> str:
-        parts = []
-        for arg in arguments:
-            name = sanitize_name(arg.get('name', 'arg') or 'arg')
-            ts_type = godot_type_to_ts(arg.get('type', 'Variant'), is_input=False)
-            parts.append(f'{name}: {ts_type}')
-        return f'({", ".join(parts)}) => void'
-
     # ── Enum ──────────────────────────────────────────────────────────────────
 
     def _gen_enum(self, enum_data: dict, indent: int) -> list:
@@ -324,8 +316,7 @@ class DtsGenerator(CodeGenerator):
     def _gen_builtin(self, cls_data: dict, ts_name: str, indent: int) -> list:
         ind  = self._ind(indent)
         ind2 = self._ind(indent + 1)
-        class_suffix = '<T extends (...args: any[]) => void = (...args: VariantArgument[]) => void>' if ts_name == 'Signal' else ''
-        lines = [f'{ind}class {ts_name}{class_suffix} {{']
+        lines = [f'{ind}class {ts_name} {{']
 
         # Constructors
         for ctor in cls_data.get('constructors', []):
@@ -416,10 +407,10 @@ class DtsGenerator(CodeGenerator):
             if setter and setter not in declared_methods:
                 lines.append(f'{ind2}{sanitize_name(setter)}(value: {ts_type_input}): void;')
 
-        # Signals
+        # Signals (as comments — no runtime type)
         for sig in cls_data.get('signals', []):
-            fn_type = self._format_signal_function_type(sig.get('arguments', []))
-            lines.append(f'{ind2}readonly {sig["name"]}: Signal<{fn_type}>;')
+            params = self._format_params(sig.get('arguments', []))
+            lines.append(f'{ind2}{sig["name"]}: Signal')
 
         # Methods
         for method in cls_data.get('methods', []):
@@ -585,61 +576,24 @@ class DtsGenerator(CodeGenerator):
         lines.append(f'import {{ {import_items} }} from "godot";')
         lines.append('')
         lines.append('declare global {')
-        lines.append('  interface ExportOptions {')
-        lines.append('    type?: string;')
-        lines.append('    hint?: number;')
-        lines.append('    hintString?: string;')
-        lines.append('    hint_string?: string;')
-        lines.append('  }')
-        lines.append('')
-        lines.append('  type SignalArgument = string | { name: string; type?: string };')
-        lines.append('  interface SignalOptions {')
-        lines.append('    args?: SignalArgument[];')
-        lines.append('  }')
-        lines.append('')
-        lines.append('  interface RpcOptions {')
-        lines.append('    mode?: "disabled" | "any_peer" | "authority" | "any" | "master" | number;')
-        lines.append('    rpc_mode?: "disabled" | "any_peer" | "authority" | "any" | "master" | number;')
-        lines.append('    transferMode?: "unreliable" | "unreliable_ordered" | "reliable" | number;')
-        lines.append('    transfer_mode?: "unreliable" | "unreliable_ordered" | "reliable" | number;')
-        lines.append('    callLocal?: boolean;')
-        lines.append('    call_local?: boolean;')
-        lines.append('    channel?: number;')
-        lines.append('  }')
-        lines.append('')
         for name in symbols:
             if name == 'Signal':
                 # Signal 支持泛型类型注解：fieldName!: Signal<() => void>，由 tree-sitter 静态解析参数
                 lines.append(f'  type {name}<T extends (...args: any[]) => void = (...args: any[]) => void> = Godot{name};')
-                lines.append(f'  const {name}: typeof Godot{name} & {{')
-                lines.append('    (args?: SignalArgument[]): PropertyDecorator;')
-                lines.append('    (options?: SignalOptions): PropertyDecorator;')
-                lines.append('  };')
+                lines.append(f'  const {name}: typeof Godot{name};')
             else:
                 lines.append(f'  type {name} = Godot{name};')
                 lines.append(f'  const {name}: typeof Godot{name};')
 
-        lines.append('  function Export(type: string): PropertyDecorator;')
-        lines.append('  function Export(hint: number, hintString?: string): PropertyDecorator;')
-        lines.append('  function Export(options?: ExportOptions): PropertyDecorator;')
-        lines.append('  function ExportCategory(name: string): PropertyDecorator;')
-        lines.append('  function ExportGroup(name: string, prefix?: string): PropertyDecorator;')
-        lines.append('  function ExportSubgroup(name: string, prefix?: string): PropertyDecorator;')
-        lines.append('  function ExportRange(min: number, max: number, step?: number, ...extraHints: string[]): PropertyDecorator;')
-        lines.append('  function ExportEnum(values: readonly string[] | string): PropertyDecorator;')
-        lines.append('  function ExportFlags(values: readonly string[] | string): PropertyDecorator;')
-        lines.append('  function ExportFile(filter?: string): PropertyDecorator;')
-        lines.append('  function ExportDir(): PropertyDecorator;')
-        lines.append('  function ExportMultiline(): PropertyDecorator;')
-        lines.append('  function ExportColorNoAlpha(): PropertyDecorator;')
-        lines.append('  function ExportNodePath(validTypes?: readonly string[] | string): PropertyDecorator;')
-        lines.append('  function ExportResource(type?: string): PropertyDecorator;')
+        lines.append('  interface ExportOptions {')
+        lines.append('    hint?: number;')
+        lines.append('    hintString?: string;')
+        lines.append('  }')
         lines.append('')
-        lines.append('  function Rpc(mode?: RpcOptions["mode"], transferMode?: RpcOptions["transferMode"], callLocal?: boolean, channel?: number): MethodDecorator;')
-        lines.append('  function Rpc(options?: RpcOptions): MethodDecorator;')
+        lines.append('  function Export(hint: number, hintString?: string): any;')
+        lines.append('  function Export(options?: ExportOptions): any;')
         lines.append('')
-        lines.append('  function Tool<T extends Function>(target: T): void;')
-        lines.append('  function GlobalClass(name?: string): ClassDecorator;')
+        lines.append('  function Tool(target: Function): void;')
         lines.append('')
         lines.append('  interface ExportEntry {')
         lines.append('    type: string;')
@@ -675,23 +629,16 @@ class DtsGenerator(CodeGenerator):
         lines.append('declare module "godot" {')
         lines.append('')
         lines.append(f'    type VariantArgument = {variant_arg_str};')
-        lines.append('    type SignalCallback<T extends any[] = VariantArgument[]> = (...args: T) => void;')
-        lines.append('    type SignalValue<T extends (...args: any[]) => void = (...args: VariantArgument[]) => void> = Signal<T>;')
-        lines.append('    type StringLike = GDString | StringName | string;')
-        lines.append('    type NodePathLike = NodePath | string;')
-        lines.append('    type DictionaryLike<T extends Record<string, VariantArgument> = Record<string, VariantArgument>> = GDDictionary | T;')
-        lines.append('    type ArrayLikeVariant<T extends VariantArgument = VariantArgument> = GDArray | T[];')
         lines.append('')
 
         # GodotObject base (every Object without an explicit parent inherits this)
         lines += [
             '    class _GodotObject {',
             '        get_instance_id(): number;',
-            '        connect<T extends any[] = VariantArgument[]>(signal: string, callable: SignalCallback<T>, flags?: number): Error;',
-            '        disconnect<T extends any[] = VariantArgument[]>(signal: string, callable: SignalCallback<T>): void;',
+            '        connect(signal: string, callable: (...args: VariantArgument[]) => void): void;',
+            '        disconnect(signal: string, callable: (...args: VariantArgument[]) => void): void;',
             '        emit_signal(signal: string, ...args: VariantArgument[]): void;',
             '        to_signal(signal: string, options?: { timeoutMs?: number; abortSignal?: AbortSignal }): Promise<VariantArgument>;',
-            '        to_signal<T extends any[]>(signal: string, options?: { timeoutMs?: number; abortSignal?: AbortSignal }): Promise<T>;',
             '    }',
             '',
         ]

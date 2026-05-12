@@ -14,7 +14,6 @@ protected:
 public:
 	bool compile() const override;
 	Napi::Function get_default_class() const override;
-	bool _can_instantiate() const override;
 	godot::ScriptLanguage *_get_language() const override;
 };
 
