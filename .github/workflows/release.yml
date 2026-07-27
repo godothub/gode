@@ -95,7 +95,7 @@ jobs:
           echo "path=$notes_file" >> "$GITHUB_OUTPUT"
 
       - name: Download packaged plugin
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-plugin
           path: dist
