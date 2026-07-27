@@ -7,7 +7,7 @@ on:
         description: Release tag to create or update
         required: true
       libnode_url:
-        description: Download URL for libnode.zip
+        description: Override the default download URL for libnode.zip
         required: false
         type: string
       prerelease:
@@ -28,14 +28,12 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       libnode_url: ${{ inputs.libnode_url }}
-    secrets: inherit
 
   test:
     needs: build
     uses: ./.github/workflows/test.yml
     with:
       plugin_artifact_name: gode-plugin
-    secrets: inherit
 
   publish:
     name: Publish GitHub release
