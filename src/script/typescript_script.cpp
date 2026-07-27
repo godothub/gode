@@ -7,12 +7,14 @@
 #include <tree_sitter/api.h>
 #include <v8-isolate.h>
 #include <v8-locker.h>
+#include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 
 using namespace godot;
 using namespace gode;
@@ -523,44 +525,155 @@ static bool parse_numeric_default(const std::string &text, Variant::Type propert
 	return true;
 }
 
+enum class ObjectExportKind {
+	NONE,
+	OBJECT,
+	RESOURCE,
+	NODE,
+};
+
+static std::string string_to_utf8(const String &value) {
+	CharString utf8 = value.utf8();
+	return std::string(utf8.get_data());
+}
+
+static std::string trim_type_text(const std::string &type_text) {
+	return string_to_utf8(String(type_text.c_str()).strip_edges());
+}
+
+static std::vector<std::string> split_top_level_union_types(const std::string &type_text) {
+	std::vector<std::string> parts;
+	std::string current;
+	int angle_depth = 0;
+	int paren_depth = 0;
+	for (char c : type_text) {
+		if (c == '<') {
+			angle_depth++;
+		} else if (c == '>' && angle_depth > 0) {
+			angle_depth--;
+		} else if (c == '(') {
+			paren_depth++;
+		} else if (c == ')' && paren_depth > 0) {
+			paren_depth--;
+		}
+
+		if (c == '|' && angle_depth == 0 && paren_depth == 0) {
+			parts.push_back(trim_type_text(current));
+			current.clear();
+			continue;
+		}
+		current.push_back(c);
+	}
+	parts.push_back(trim_type_text(current));
+	return parts;
+}
+
+static std::string unwrap_nullable_type_text(const std::string &type_text) {
+	std::string trimmed = trim_type_text(type_text);
+	if (trimmed.rfind("readonly ", 0) == 0) {
+		trimmed = trim_type_text(trimmed.substr(strlen("readonly ")));
+	}
+	while (trimmed.size() >= 2 && trimmed.front() == '(' && trimmed.back() == ')') {
+		trimmed = trim_type_text(trimmed.substr(1, trimmed.size() - 2));
+	}
+
+	std::vector<std::string> union_types = split_top_level_union_types(trimmed);
+	for (const std::string &part : union_types) {
+		if (part != "null" && part != "undefined" && part != "void") {
+			return part;
+		}
+	}
+	return trimmed;
+}
+
+static std::string canonical_type_name(const std::string &type_str) {
+	std::string type_name = unwrap_nullable_type_text(type_str);
+	if (type_name.size() > 2 && type_name.compare(type_name.size() - 2, 2, "[]") == 0) {
+		return "Array";
+	}
+	return string_to_utf8(class_name_tail(String(type_name.c_str())));
+}
+
+static StringName godot_class_name_from_type(const std::string &type_str) {
+	std::string type_name = canonical_type_name(type_str);
+	if (type_name == "GodotObject") {
+		type_name = "Object";
+	}
+	return StringName(type_name.c_str());
+}
+
+static ObjectExportKind classify_engine_object_class(const StringName &class_name) {
+	if (class_name.is_empty()) {
+		return ObjectExportKind::NONE;
+	}
+	if (class_name == StringName("Resource")) {
+		return ObjectExportKind::RESOURCE;
+	}
+	if (class_name == StringName("Node")) {
+		return ObjectExportKind::NODE;
+	}
+	if (class_name == StringName("Object") || class_name == StringName("RefCounted")) {
+		return ObjectExportKind::OBJECT;
+	}
+
+	ClassDBSingleton *class_db = ClassDBSingleton::get_singleton();
+	if (!class_db || !class_db->class_exists(class_name)) {
+		return ObjectExportKind::NONE;
+	}
+	if (class_db->is_parent_class(class_name, StringName("Resource"))) {
+		return ObjectExportKind::RESOURCE;
+	}
+	if (class_db->is_parent_class(class_name, StringName("Node"))) {
+		return ObjectExportKind::NODE;
+	}
+	if (class_db->is_parent_class(class_name, StringName("Object"))) {
+		return ObjectExportKind::OBJECT;
+	}
+	return ObjectExportKind::NONE;
+}
+
 static Variant::Type parse_type_string(const std::string &type_str) {
-	if (type_str == "bool" || type_str == "boolean" || type_str == "Boolean") {
+	const std::string type_name = canonical_type_name(type_str);
+	if (type_name == "bool" || type_name == "boolean" || type_name == "Boolean") {
 		return Variant::BOOL;
 	}
-	if (type_str == "int") {
+	if (type_name == "int") {
 		return Variant::INT;
 	}
-	if (type_str == "float" || type_str == "number" || type_str == "Number") {
+	if (type_name == "float" || type_name == "number" || type_name == "Number") {
 		return Variant::FLOAT;
 	}
-	if (type_str == "String" || type_str == "string") {
+	if (type_name == "String" || type_name == "string") {
 		return Variant::STRING;
 	}
-	if (type_str == "Vector2") {
+	if (type_name == "Vector2") {
 		return Variant::VECTOR2;
 	}
-	if (type_str == "Vector2i") {
+	if (type_name == "Vector2i") {
 		return Variant::VECTOR2I;
 	}
-	if (type_str == "Vector3") {
+	if (type_name == "Vector3") {
 		return Variant::VECTOR3;
 	}
-	if (type_str == "Vector3i") {
+	if (type_name == "Vector3i") {
 		return Variant::VECTOR3I;
 	}
-	if (type_str == "Vector4") {
+	if (type_name == "Vector4") {
 		return Variant::VECTOR4;
 	}
-	if (type_str == "Vector4i") {
+	if (type_name == "Vector4i") {
 		return Variant::VECTOR4I;
 	}
-	if (type_str == "Color") {
+	if (type_name == "Color") {
 		return Variant::COLOR;
 	}
-	if (type_str == "NodePath") {
+	if (type_name == "NodePath") {
 		return Variant::NODE_PATH;
 	}
-	if (type_str == "Object") {
+	if (type_name == "Array") {
+		return Variant::ARRAY;
+	}
+	if (classify_engine_object_class(godot_class_name_from_type(type_name)) != ObjectExportKind::NONE) {
 		return Variant::OBJECT;
 	}
 	return Variant::NIL;
@@ -604,6 +717,178 @@ static TSNode unwrap_metadata_expression(TSNode node) {
 }
 
 static bool parse_default_value(TSNode value_node, const std::string &source, Variant::Type property_type, Variant &r_value);
+static TSNode find_default_class(TSNode root_node, uint32_t child_count, const std::string &source);
+static void configure_property_type(
+		PropertyInfo &property,
+		const std::string &type_str,
+		const String &file_path,
+		const std::string &source,
+		TSNode root_node,
+		uint32_t child_count);
+
+static StringName qualifier_from_type_text(const std::string &type_str) {
+	String expression(unwrap_nullable_type_text(type_str).c_str());
+	expression = expression.strip_edges();
+	const int64_t generic_start = expression.find("<");
+	if (generic_start >= 0) {
+		expression = expression.substr(0, generic_start).strip_edges();
+	}
+	const int64_t separator = expression.rfind(".");
+	if (separator <= 0) {
+		return StringName();
+	}
+	return StringName(expression.substr(0, separator).strip_edges());
+}
+
+static ObjectExportKind resolve_typescript_object_kind(
+		const String &file_path,
+		const std::string &source,
+		TSNode root_node,
+		uint32_t child_count,
+		const StringName &class_name,
+		const StringName &class_qualifier,
+		int depth,
+		std::unordered_set<std::string> &visited) {
+	if (class_name.is_empty() || depth > 8) {
+		return ObjectExportKind::NONE;
+	}
+
+	ObjectExportKind engine_kind = classify_engine_object_class(class_name);
+	if (engine_kind != ObjectExportKind::NONE) {
+		return engine_kind;
+	}
+
+	const std::string visit_key = string_to_utf8(file_path) + "::" + string_to_utf8(String(class_qualifier)) + "." + string_to_utf8(String(class_name));
+	if (visited.find(visit_key) != visited.end()) {
+		return ObjectExportKind::NONE;
+	}
+	visited.insert(visit_key);
+
+	TSNode class_node = {};
+	if (class_qualifier.is_empty()) {
+		class_node = find_class_declaration_by_name(root_node, child_count, source, class_name);
+	}
+
+	String next_file_path = file_path;
+	std::string next_source = source;
+	TSParser *external_parser = nullptr;
+	TSTree *external_tree = nullptr;
+	TSNode next_root_node = root_node;
+	uint32_t next_child_count = child_count;
+
+	if (ts_node_is_null(class_node)) {
+		String imported_path = resolve_imported_class_path(file_path, source, root_node, child_count, class_name, class_qualifier);
+		if (imported_path.is_empty()) {
+			return ObjectExportKind::NONE;
+		}
+
+		String imported_source = FileAccess::get_file_as_string(imported_path);
+		if (FileAccess::get_open_error() != OK) {
+			return ObjectExportKind::NONE;
+		}
+
+		next_file_path = imported_path;
+		next_source = imported_source.utf8().get_data();
+		external_parser = ts_parser_new();
+		if (!external_parser) {
+			return ObjectExportKind::NONE;
+		}
+		if (!ts_parser_set_language(external_parser, tree_sitter_typescript())) {
+			ts_parser_delete(external_parser);
+			return ObjectExportKind::NONE;
+		}
+		external_tree = ts_parser_parse_string(external_parser, nullptr, next_source.c_str(), next_source.length());
+		if (!external_tree) {
+			ts_parser_delete(external_parser);
+			return ObjectExportKind::NONE;
+		}
+
+		next_root_node = ts_tree_root_node(external_tree);
+		next_child_count = ts_node_child_count(next_root_node);
+		class_node = find_class_declaration_by_name(next_root_node, next_child_count, next_source, class_name);
+		if (ts_node_is_null(class_node) && class_qualifier.is_empty()) {
+			class_node = find_default_class(next_root_node, next_child_count, next_source);
+		}
+	}
+
+	ObjectExportKind result = ObjectExportKind::NONE;
+	if (!ts_node_is_null(class_node)) {
+		TSNode base_node = extends_class_node_from_class(class_node);
+		if (!ts_node_is_null(base_node)) {
+			StringName base_name = class_name_from_extends_node(base_node, next_source);
+			StringName base_qualifier = qualifier_from_extends_node(base_node, next_source);
+			result = resolve_typescript_object_kind(next_file_path, next_source, next_root_node, next_child_count, base_name, base_qualifier, depth + 1, visited);
+		}
+	}
+
+	if (external_tree) {
+		ts_tree_delete(external_tree);
+	}
+	if (external_parser) {
+		ts_parser_delete(external_parser);
+	}
+	return result;
+}
+
+static void configure_property_type(
+		PropertyInfo &property,
+		const std::string &type_str,
+		const String &file_path,
+		const std::string &source,
+		TSNode root_node,
+		uint32_t child_count) {
+	property.type = parse_type_string(type_str);
+	const StringName type_class_name = godot_class_name_from_type(type_str);
+	if (type_class_name.is_empty() || type_class_name == StringName("Array")) {
+		return;
+	}
+
+	ObjectExportKind object_kind = classify_engine_object_class(type_class_name);
+	if (object_kind == ObjectExportKind::NONE) {
+		std::unordered_set<std::string> visited;
+		object_kind = resolve_typescript_object_kind(file_path, source, root_node, child_count, type_class_name, qualifier_from_type_text(type_str), 0, visited);
+	}
+
+	if (property.type == Variant::NIL && object_kind != ObjectExportKind::NONE) {
+		property.type = Variant::OBJECT;
+	}
+	if (property.type != Variant::OBJECT) {
+		return;
+	}
+
+	if (property.class_name.is_empty()) {
+		property.class_name = type_class_name;
+	}
+
+	if (property.hint == PROPERTY_HINT_NONE) {
+		if (object_kind == ObjectExportKind::RESOURCE) {
+			property.hint = PROPERTY_HINT_RESOURCE_TYPE;
+			property.hint_string = String(type_class_name);
+		} else if (object_kind == ObjectExportKind::NODE) {
+			property.hint = PROPERTY_HINT_NODE_TYPE;
+			property.hint_string = String(type_class_name);
+		}
+	}
+
+	if ((property.hint == PROPERTY_HINT_RESOURCE_TYPE || property.hint == PROPERTY_HINT_NODE_TYPE) && property.hint_string.is_empty()) {
+		property.hint_string = String(type_class_name);
+	}
+	if (property.hint == PROPERTY_HINT_RESOURCE_TYPE && !property.hint_string.is_empty()) {
+		property.class_name = StringName(property.hint_string);
+	}
+}
+
+static void finalize_explicit_object_hint(PropertyInfo &property) {
+	if (property.hint != PROPERTY_HINT_RESOURCE_TYPE && property.hint != PROPERTY_HINT_NODE_TYPE) {
+		return;
+	}
+	if (property.type == Variant::NIL) {
+		property.type = Variant::OBJECT;
+	}
+	if (property.type == Variant::OBJECT && property.class_name.is_empty() && !property.hint_string.is_empty()) {
+		property.class_name = StringName(property.hint_string);
+	}
+}
 
 static void collect_parent_properties(
 		const StringName &parent_name,
@@ -682,15 +967,7 @@ static void collect_parent_properties(
 								uint32_t ts = ts_node_start_byte(ftype);
 								uint32_t te = ts_node_end_byte(ftype);
 								std::string type_str = source.substr(ts, te - ts);
-								if (type_str == "string") {
-									pi.type = Variant::STRING;
-								} else if (type_str == "number") {
-									pi.type = Variant::FLOAT;
-								} else if (type_str == "boolean") {
-									pi.type = Variant::BOOL;
-								} else {
-									pi.type = Variant::OBJECT;
-								}
+								configure_property_type(pi, type_str, file_path, source, root_node, child_count);
 							}
 							properties[prop_name] = pi;
 							property_list.push_back(pi);
@@ -738,7 +1015,7 @@ static void collect_parent_properties(
 	}
 }
 
-static void collect_interfaces_from_node(TSNode root_node, uint32_t child_count, const std::string &source, HashMap<StringName, Vector<PropertyInfo>> &interfaces);
+static void collect_interfaces_from_node(TSNode root_node, uint32_t child_count, const std::string &source, const String &file_path, HashMap<StringName, Vector<PropertyInfo>> &interfaces);
 
 // Recursively parse object literals and store values as prefix::key entries in property_defaults.
 static void parse_object_defaults(TSNode obj_node, const std::string &source, const std::string &prefix, HashMap<StringName, Variant> &property_defaults) {
@@ -785,7 +1062,7 @@ static HashMap<StringName, Vector<PropertyInfo>> parse_interfaces(TSNode root_no
 	HashMap<StringName, Vector<PropertyInfo>> interfaces;
 
 	// Parse interfaces declared in the current file.
-	collect_interfaces_from_node(root_node, child_count, source, interfaces);
+	collect_interfaces_from_node(root_node, child_count, source, file_path, interfaces);
 
 	// Scan imports and load interfaces from external files.
 	for (uint32_t i = 0; i < child_count; i++) {
@@ -826,7 +1103,7 @@ static HashMap<StringName, Vector<PropertyInfo>> parse_interfaces(TSNode root_no
 		TSNode ext_root = ts_tree_root_node(ext_tree);
 		uint32_t ext_count = ts_node_child_count(ext_root);
 
-		collect_interfaces_from_node(ext_root, ext_count, ext_src, interfaces);
+		collect_interfaces_from_node(ext_root, ext_count, ext_src, ts_path, interfaces);
 
 		ts_tree_delete(ext_tree);
 		ts_parser_delete(ext_parser);
@@ -835,7 +1112,7 @@ static HashMap<StringName, Vector<PropertyInfo>> parse_interfaces(TSNode root_no
 	return interfaces;
 }
 
-static void collect_interfaces_from_node(TSNode root_node, uint32_t child_count, const std::string &source, HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
+static void collect_interfaces_from_node(TSNode root_node, uint32_t child_count, const std::string &source, const String &file_path, HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
 	for (uint32_t i = 0; i < child_count; i++) {
 		TSNode child = ts_node_child(root_node, i);
 		TSNode iface_node = { 0 };
@@ -896,7 +1173,7 @@ static void collect_interfaces_from_node(TSNode root_node, uint32_t child_count,
 					uint32_t ts = ts_node_start_byte(inner);
 					uint32_t te = ts_node_end_byte(inner);
 					std::string type_str = source.substr(ts, te - ts);
-					pi.type = parse_type_string(type_str);
+					configure_property_type(pi, type_str, file_path, source, root_node, child_count);
 					// Preserve the raw type name so nested object detection can use it when the type is not a known Variant.
 					if (pi.type == Variant::NIL) {
 						pi.class_name = StringName(type_str.c_str());
@@ -1290,7 +1567,7 @@ static void parse_static_metadata(const std::string &name, TSNode value, const s
 		return;
 	}
 
-	if ((name == "rpc_config" || name == "rpcs") && strcmp(ts_node_type(value), "object") == 0) {
+	if (name == "rpcConfig" && strcmp(ts_node_type(value), "object") == 0) {
 		for (uint32_t i = 0; i < ts_node_named_child_count(value); i++) {
 			TSNode pair = ts_node_named_child(value, i);
 			if (strcmp(ts_node_type(pair), "pair") != 0) {
@@ -1312,17 +1589,17 @@ static void parse_static_metadata(const std::string &name, TSNode value, const s
 					std::string key = strip_quotes(node_text(source, ts_node_child_by_field_name(cfg_pair, "key", 3)));
 					TSNode val = unwrap_metadata_expression(ts_node_child_by_field_name(cfg_pair, "value", 5));
 					std::string val_text = strip_quotes(node_text(source, val));
-					if (key == "rpc_mode" || key == "mode") {
+					if (key == "mode") {
 						int parsed_mode = 0;
 						if (parse_rpc_mode(val_text, parsed_mode)) {
 							cfg["rpc_mode"] = parsed_mode;
 						}
-					} else if (key == "transfer_mode" || key == "transferMode") {
+					} else if (key == "transferMode") {
 						int parsed_mode = 0;
 						if (parse_transfer_mode(val_text, parsed_mode)) {
 							cfg["transfer_mode"] = parsed_mode;
 						}
-					} else if (key == "call_local" || key == "callLocal") {
+					} else if (key == "callLocal") {
 						bool parsed_bool = false;
 						if (parse_bool_literal(val_text, parsed_bool)) {
 							cfg["call_local"] = parsed_bool;
@@ -1383,7 +1660,7 @@ static void parse_method_params(TSNode method_node, const std::string &source, M
 	}
 }
 
-static void parse_class_members(TSNode class_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, Dictionary> &rpc_configs, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
+static void parse_class_members(TSNode class_node, const std::string &source, const String &file_path, TSNode root_node, uint32_t child_count, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, Dictionary> &rpc_configs, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
 	TSNode body_node = ts_node_child_by_field_name(class_node, "body", 4);
 	if (ts_node_is_null(body_node)) {
 		return;
@@ -1454,12 +1731,12 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 							if (ts_node_is_null(val)) {
 								continue;
 							}
-							std::string key_str = strip_quotes(source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key)));
-							if (key_str == "hint") {
-								parse_property_hint_value(val, source, export_hint);
-							} else if (key_str == "hintString" || key_str == "hint_string") {
-								parse_metadata_string_value(val, source, export_hint_string);
-							}
+								std::string key_str = strip_quotes(source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key)));
+								if (key_str == "hint") {
+									parse_property_hint_value(val, source, export_hint);
+								} else if (key_str == "hintString") {
+									parse_metadata_string_value(val, source, export_hint_string);
+								}
 						}
 					} else {
 						// @Export(hint) or @Export(hint, "hintString").
@@ -1540,9 +1817,10 @@ static void parse_class_members(TSNode class_node, const std::string &source, Ha
 					uint32_t ts = ts_node_start_byte(inner_type);
 					uint32_t te = ts_node_end_byte(inner_type);
 					type_str = source.substr(ts, te - ts);
-					pi.type = parse_type_string(type_str);
+					configure_property_type(pi, type_str, file_path, source, root_node, child_count);
 				}
 			}
+			finalize_explicit_object_hint(pi);
 
 			StringName iface_key(type_str.c_str());
 			if (!type_str.empty() && interfaces.has(iface_key)) {
@@ -1658,7 +1936,7 @@ static void upsert_ordered_property(const PropertyInfo &property, HashMap<String
 	property_list.push_back(property);
 }
 
-static void parse_exports_object(TSNode obj_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults) {
+static void parse_exports_object(TSNode obj_node, const std::string &source, const String &file_path, TSNode root_node, uint32_t child_count, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults) {
 	// obj_node is the outer object. Each pair key is a property name and each value is a descriptor object: { type, default, ... }.
 	for (uint32_t j = 0; j < ts_node_child_count(obj_node); j++) {
 		TSNode pair = ts_node_child(obj_node, j);
@@ -1684,6 +1962,8 @@ static void parse_exports_object(TSNode obj_node, const std::string &source, Has
 		pi.usage = PROPERTY_USAGE_DEFAULT;
 		pi.hint = PROPERTY_HINT_NONE;
 		pi.type = Variant::NIL;
+		std::string type_str;
+		TSNode default_node = {};
 
 		for (uint32_t k = 0; k < ts_node_child_count(value); k++) {
 			TSNode field = ts_node_child(value, k);
@@ -1702,19 +1982,27 @@ static void parse_exports_object(TSNode obj_node, const std::string &source, Has
 			std::string field_key = strip_quotes(source.substr(fks, fke - fks));
 
 			if (field_key == "type") {
-				pi.type = parse_type_string(strip_quotes(node_text(source, fval)));
+				type_str = strip_quotes(node_text(source, fval));
 			} else if (field_key == "hint") {
 				PropertyHint parsed_hint = PROPERTY_HINT_NONE;
 				if (parse_property_hint_value(fval, source, parsed_hint)) {
 					pi.hint = parsed_hint;
 				}
-			} else if (field_key == "hintString" || field_key == "hint_string") {
+			} else if (field_key == "hintString") {
 				parse_metadata_string_value(fval, source, pi.hint_string);
 			} else if (field_key == "default") {
-				Variant default_value;
-				if (parse_default_value(fval, source, pi.type, default_value)) {
-					property_defaults[prop_name] = default_value;
-				}
+				default_node = fval;
+			}
+		}
+
+		if (!type_str.empty()) {
+			configure_property_type(pi, type_str, file_path, source, root_node, child_count);
+		}
+		finalize_explicit_object_hint(pi);
+		if (!ts_node_is_null(default_node)) {
+			Variant default_value;
+			if (parse_default_value(default_node, source, pi.type, default_value)) {
+				property_defaults[prop_name] = default_value;
 			}
 		}
 
@@ -1765,7 +2053,7 @@ static void parse_exported_field_defaults(TSNode class_node, const std::string &
 }
 
 // static exports = {...} appears in the TypeScript class body as a public_field_definition with a static modifier.
-static void parse_static_exports(TSNode class_node, const std::string &source, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults) {
+static void parse_static_exports(TSNode class_node, const std::string &source, const String &file_path, TSNode root_node, uint32_t child_count, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults) {
 	TSNode body = ts_node_child_by_field_name(class_node, "body", 4);
 	if (ts_node_is_null(body)) {
 		return;
@@ -1806,7 +2094,7 @@ static void parse_static_exports(TSNode class_node, const std::string &source, H
 			continue;
 		}
 
-		parse_exports_object(value, source, properties, property_list, property_defaults);
+		parse_exports_object(value, source, file_path, root_node, child_count, properties, property_list, property_defaults);
 		return;
 	}
 }
@@ -1889,8 +2177,8 @@ bool TypeScriptScript::compile() const {
 		base_class_qualifier = qualifier_from_extends_node(base_class_node, source);
 	}
 	base_script_path = resolve_imported_class_path(get_path(), source, root_node, child_count, base_class_name, base_class_qualifier);
-	parse_class_members(class_node, source, properties, property_list, property_defaults, methods, signals, rpc_configs, member_lines, interfaces);
-	parse_static_exports(class_node, source, properties, property_list, property_defaults);
+	parse_class_members(class_node, source, get_path(), root_node, child_count, properties, property_list, property_defaults, methods, signals, rpc_configs, member_lines, interfaces);
+	parse_static_exports(class_node, source, get_path(), root_node, child_count, properties, property_list, property_defaults);
 	parse_exported_field_defaults(class_node, source, properties, property_defaults);
 	collect_parent_properties(base_class_name, base_class_qualifier, source, root_node, child_count, get_path(), properties, property_list, property_defaults);
 
