@@ -561,8 +561,8 @@ class DtsGenerator(CodeGenerator):
         lines.append('  }')
         lines.append('  type ExportMap = Record<string, ExportEntry>;')
         lines.append('')
-        lines.append('type int = number;')
-        lines.append('type float = number;')
+        lines.append('  type int = number | bigint;')
+        lines.append('  type float = number;')
 
         lines.append('}')
         lines.append('')
