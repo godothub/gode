@@ -5,13 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       libnode_url:
-        description: Download URL for libnode.zip
+        description: Override the default download URL for libnode.zip
         required: false
         type: string
   workflow_call:
     inputs:
       libnode_url:
-        description: Download URL for libnode.zip
+        description: Override the default download URL for libnode.zip
         required: false
         type: string
 
@@ -20,6 +20,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.14"
+  LIBNODE_URL: "https://github.com/moluopro/libnode/releases/download/24.18.0/libnode.zip"
 
 jobs:
   build:
@@ -72,7 +73,7 @@ jobs:
       - name: Mask libnode URL
         shell: bash
         env:
-          LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
+          LIBNODE_URL: ${{ inputs.libnode_url || env.LIBNODE_URL }}
         run: |
           if [ -n "$LIBNODE_URL" ]; then
             echo "::add-mask::$LIBNODE_URL"
@@ -81,7 +82,7 @@ jobs:
       - name: Prepare libnode
         shell: bash
         env:
-          LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
+          LIBNODE_URL: ${{ inputs.libnode_url || env.LIBNODE_URL }}
         run: >
           ./.github/shell/prepare-libnode.sh
           --url "$LIBNODE_URL"
