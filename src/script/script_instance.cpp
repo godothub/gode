@@ -183,9 +183,7 @@ void ScriptInstance::reload(bool p_keep_state) {
 		return;
 	}
 
-	if (!script->compile()) {
-		return;
-	}
+	script->compile();
 
 	// Register new signals during reload and skip existing ones to avoid duplicate registration errors.
 	for (const KeyValue<StringName, MethodInfo> &E : script->signals) {
@@ -465,7 +463,10 @@ int32_t ScriptInstance::get_method_argument_count(const StringName &p_method, bo
 		r_is_valid = false;
 		return 0;
 	}
-	script->compile();
+	if (!script->compile()) {
+		r_is_valid = false;
+		return 0;
+	}
 	if (!script->methods.has(p_method)) {
 		r_is_valid = false;
 		return 0;
@@ -708,6 +709,31 @@ bool ScriptInstance::property_get_revert(const StringName &p_name, Variant &r_re
 		return true;
 	}
 	return false;
+}
+
+void ScriptInstance::get_property_state(GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) const {
+	if (!p_add_func || !script.is_valid()) {
+		return;
+	}
+
+	if (!script->compile()) {
+		return;
+	}
+	for (const PropertyInfo &property : script->get_property_list_ordered()) {
+		if ((property.usage & PROPERTY_USAGE_STORAGE) == 0 || !script->properties.has(property.name)) {
+			continue;
+		}
+
+		Variant value;
+		if (!get(property.name, value)) {
+			continue;
+		}
+
+		p_add_func(
+				reinterpret_cast<GDExtensionConstStringNamePtr>(&property.name),
+				reinterpret_cast<GDExtensionConstVariantPtr>(&value),
+				p_userdata);
+	}
 }
 
 void ScriptInstance::get_property_list(const GDExtensionPropertyInfo *&r_list, uint32_t &r_count) const {
