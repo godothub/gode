@@ -127,31 +127,31 @@ jobs:
         run: python generator/generator.py
 
       - name: Download Windows
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-binary-windows-x64
           path: example/addons/gode/binary/windows/x64
 
       - name: Download Linux
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-binary-linux-x64
           path: example/addons/gode/binary/linux/x64
 
       - name: Download macOS
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-binary-macos-arm64
           path: example/addons/gode/binary/macos/arm64
 
       - name: Download iOS
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-binary-ios-arm64
           path: example/addons/gode/binary/ios/arm64
 
       - name: Download Android
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gode-binary-android-arm64
           path: example/addons/gode/binary/android/arm64
