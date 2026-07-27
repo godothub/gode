@@ -25,7 +25,7 @@ export default class Spawner extends Node3D {
 }
 ```
 
-The `type` value uses Godot Variant type names such as `"String"`, `"int"`, `"float"`, `"bool"`, `"Vector3"`, and `"Object"`. Export descriptors may also include Inspector metadata such as `hint`, `hintString`, and a Godot Variant-compatible `default` value.
+The `type` value uses Godot Variant type names such as `"String"`, `"int"`, `"float"`, `"bool"`, `"Vector3"`, and `"Object"`. Export descriptors may also include `hint` for the Godot Inspector hint type, `hintString` for that hint's argument string, and a Godot Variant-compatible `default` value.
 
 ## Tool scripts
 
@@ -64,21 +64,21 @@ Signal arguments use `{ name, type }` entries. Once declared, `has_signal()`, `c
 
 ## RPC metadata
 
-Methods callable through Godot multiplayer RPC must be declared in `static rpc_config`:
+Methods callable through Godot multiplayer RPC must be declared in `static rpcConfig`:
 
 ```ts
 import { CharacterBody3D } from "godot";
 
 export default class Robot extends CharacterBody3D {
-  static rpc_config = {
-    hit: { mode: "authority", call_local: true },
+  static rpcConfig = {
+    hit: { mode: "authority", callLocal: true },
     play_effect: {
       mode: "any_peer",
-      call_local: true,
-      transfer_mode: "reliable",
+      callLocal: true,
+      transferMode: "reliable",
       channel: 0,
     },
-  };
+  } satisfies RpcConfig;
 
   hit(): void {
     this.health -= 1;
@@ -90,7 +90,9 @@ export default class Robot extends CharacterBody3D {
 }
 ```
 
-Supported `mode` values are `"authority"`, `"any_peer"`, and `"disabled"`. Supported `transfer_mode` values are `"reliable"`, `"unreliable"`, and `"unreliable_ordered"`. Omitted fields use Godot's defaults.
+Supported `mode` values are `"authority"`, `"any_peer"`, and `"disabled"`. Supported `transferMode` values are `"reliable"`, `"unreliable"`, and `"unreliable_ordered"`. Omitted fields use Godot's defaults.
+
+Script-level RPC metadata is exposed through `Script.get_rpc_config()`. `Node.get_node_rpc_config()` only reports configuration assigned at runtime with `Node.rpc_config()`.
 
 ## Metadata checklist
 
