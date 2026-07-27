@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create or update
+        description: Plain release tag without v prefix
         required: true
       libnode_url:
         description: Override the default download URL for libnode.zip
@@ -24,7 +24,32 @@ permissions:
   actions: read
 
 jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release_tag.outputs.tag }}
+
+    steps:
+      - name: Validate release tag
+        id: release_tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" == v* ]]; then
+            echo "Release tag must not use a v prefix: use ${RELEASE_TAG#v} instead." >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be plain SemVer, for example 2.3.0." >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: validate
     uses: ./.github/workflows/build.yml
     with:
       libnode_url: ${{ inputs.libnode_url }}
@@ -39,6 +64,7 @@ jobs:
     name: Publish GitHub release
     runs-on: ubuntu-latest
     needs:
+      - validate
       - build
       - test
 
@@ -50,10 +76,10 @@ jobs:
         id: release_notes
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
           set -euo pipefail
-          version="${RELEASE_TAG#v}"
+          version="$RELEASE_TAG"
           notes_file="$RUNNER_TEMP/release-notes.md"
           awk -v version="$version" '
             $0 == "## " version { capture = 1; next }
@@ -77,8 +103,8 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
-          name: ${{ inputs.tag }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: ${{ needs.validate.outputs.tag }}
           prerelease: ${{ inputs.prerelease == 'true' }}
           body_path: ${{ steps.release_notes.outputs.path }}
           files: dist/gode.zip

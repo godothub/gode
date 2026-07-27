@@ -1003,16 +1003,23 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
 		for token in (
+			"validate:",
+			"Release tag must not use a v prefix",
+			"needs: validate",
+			"needs.validate.outputs.tag",
 			"needs: build",
 			"plugin_artifact_name: gode-plugin",
 			"CHANGELOG.md",
-			"version=\"${RELEASE_TAG#v}\"",
+			"version=\"$RELEASE_TAG\"",
 			"sed '/./,$!d'",
 			"sed -e :a",
 			"body_path: ${{ steps.release_notes.outputs.path }}",
 			"files: dist/gode.zip",
 		):
 			self.assertIn(token, release_workflow)
+		self.assertNotIn("version=\"${RELEASE_TAG#v}\"", release_workflow)
+		self.assertNotIn("tag_name: ${{ inputs.tag }}", release_workflow)
+		self.assertNotIn("name: ${{ inputs.tag }}", release_workflow)
 		self.assertNotIn("generate_release_notes: true", release_workflow)
 
 	def test_static_workflow_prepares_typescript_compiler_before_tests(self):
