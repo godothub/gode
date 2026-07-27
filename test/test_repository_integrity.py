@@ -2279,6 +2279,9 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		]
 		self.assertNotIn("default?:", export_options_body)
 		self.assertIn('    default?: import("godot").VariantArgument;', export_entry_body)
+		self.assertIn("  type int = number | bigint;", globals_dts)
+		self.assertIn("  type float = number;", globals_dts)
+		self.assertNotIn("type int = number;\n", globals_dts)
 		self.assertIn("  function Signal(...args: any[]): any;", globals_dts)
 		self.assertIn("  function Tool(...args: any[]): any;", globals_dts)
 		self.assertNotIn("GodotModule.", globals_dts)

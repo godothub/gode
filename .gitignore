@@ -48,3 +48,7 @@ example/addons/gode/tsc/
 example/addons/gode/binary/*
 !example/addons/gode/binary/gode.gdextension
 !example/addons/gode/binary/gode.gdextension.uid
+
+# IDE and local CMake build directories
+.idea/
+*-build-*
