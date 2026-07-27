@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "Select the MSVC runtime library." FORCE)
 
-project(gode VERSION 2.0.0 LANGUAGES C CXX)
+project(gode VERSION 2.3.0 LANGUAGES C CXX)
 
 if(NOT CMAKE_CONFIGURATION_TYPES)
 	if(NOT CMAKE_BUILD_TYPE)
@@ -28,7 +28,6 @@ endif()
 set(GODOT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/godot-cpp" CACHE PATH "Path to godot-cpp")
 set(NODE_ADDON_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/node-addon-api" CACHE PATH "Path to node-addon-api")
 set(TREE_SITTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/tree-sitter" CACHE PATH "Path to tree-sitter")
-set(TREE_SITTER_JAVASCRIPT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/tree-sitter-javascript" CACHE PATH "Path to tree-sitter-javascript")
 set(TREE_SITTER_TYPESCRIPT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/tree-sitter-typescript" CACHE PATH "Path to tree-sitter-typescript")
 set(GODE_TARGET_ARCH "" CACHE STRING "Target architecture override: x64, arm64")
 
@@ -79,23 +78,28 @@ endif()
 add_library(gode_tree_sitter STATIC
 	"${TREE_SITTER_DIR}/lib/src/lib.c"
 )
+set_target_properties(gode_tree_sitter PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED ON
+)
+target_compile_definitions(gode_tree_sitter PRIVATE
+	_POSIX_C_SOURCE=200112L
+	_DEFAULT_SOURCE
+	_BSD_SOURCE
+	_DARWIN_C_SOURCE
+)
 target_include_directories(gode_tree_sitter PUBLIC
 	"${TREE_SITTER_DIR}/lib/include"
 	"${TREE_SITTER_DIR}/lib/src"
 )
 
-add_library(gode_tree_sitter_javascript STATIC
-	"${TREE_SITTER_JAVASCRIPT_DIR}/src/parser.c"
-	"${TREE_SITTER_JAVASCRIPT_DIR}/src/scanner.c"
-)
-target_include_directories(gode_tree_sitter_javascript PRIVATE
-	"${TREE_SITTER_DIR}/lib/include"
-	"${TREE_SITTER_JAVASCRIPT_DIR}/src"
-)
-
 add_library(gode_tree_sitter_typescript STATIC
 	"${TREE_SITTER_TYPESCRIPT_DIR}/typescript/src/parser.c"
 	"${TREE_SITTER_TYPESCRIPT_DIR}/typescript/src/scanner.c"
+)
+set_target_properties(gode_tree_sitter_typescript PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED ON
 )
 target_include_directories(gode_tree_sitter_typescript PRIVATE
 	"${TREE_SITTER_DIR}/lib/include"
@@ -187,7 +191,6 @@ target_link_libraries(gode PRIVATE
 	godot-cpp
 	gode_libnode
 	gode_tree_sitter
-	gode_tree_sitter_javascript
 	gode_tree_sitter_typescript
 	${GODE_LIBNODE_SYSTEM_LIBS}
 )

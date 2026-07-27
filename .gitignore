@@ -9,6 +9,8 @@ dist/
 FORME/
 gallery/
 *.import
+node_modules/
+.astro/
 
 # Python cache files
 __pycache__/
@@ -19,7 +21,7 @@ __pycache__/
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon?
+Icon[[:cntrl:]]
 ._*
 .DocumentRevisions-V100
 .fseventsd
@@ -40,6 +42,7 @@ src/generated/
 
 # Generated TypeScript declarations
 example/addons/gode/types/
+example/addons/gode/tsc/
 
 # Example addon binaries: keep the Godot extension manifest, ignore built libraries.
 example/addons/gode/binary/*

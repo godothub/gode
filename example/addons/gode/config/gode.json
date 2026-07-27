@@ -1,0 +1,29 @@
+{
+  "debug": {
+    "inspector": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 9229,
+      "waitForDebugger": false,
+      "breakOnStart": false,
+      "sourceMaps": true,
+      "logUrl": true,
+      "autoIncrementPort": true,
+      "maxPortRetries": 20,
+      "allowInRelease": false
+    }
+  },
+  "export": {
+    "npm": {
+      "exportDependencies": true,
+      "requireTools": true,
+      "includeManifests": true,
+      "includeNodeModules": true,
+      "excludePaths": [
+        "node_modules/.cache",
+        "node_modules/.bin"
+      ],
+      "extraIncludePaths": []
+    }
+  }
+}

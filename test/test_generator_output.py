@@ -1,8 +1,12 @@
+import contextlib
+import io
+import json
 import importlib.util
 import pathlib
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -11,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 @unittest.skipUnless(importlib.util.find_spec("jinja2"), "jinja2 is required for generator output tests")
 class GeneratorOutputTests(unittest.TestCase):
 	def test_render_does_not_touch_unchanged_files(self):
-		from generator.core.base_generator import CodeGenerator
+		from generator.base_generator import CodeGenerator
 
 		with tempfile.TemporaryDirectory() as temp_dir:
 			root = pathlib.Path(temp_dir)
@@ -52,26 +56,34 @@ class GeneratorOutputTests(unittest.TestCase):
 		self.assertEqual("const godot::TypedDictionary<int64_t, godot::String> &", get_cpp_type("typeddictionary::int;String", "", refcounted, is_arg=True))
 
 	def test_typed_collection_parsing_is_shared_and_stable(self):
-		from generator.dts.dts_generator import godot_type_to_ts
+		from generator.dts_generator import godot_type_to_ts
 		from generator.utils.type_mappings import parse_typedarray_element_type, parse_typeddictionary_types
 
 		self.assertEqual("CompositorEffect", parse_typedarray_element_type("typedarray::24/17:CompositorEffect"))
 		self.assertEqual("Dictionary", parse_typedarray_element_type("typedarray::27/0:"))
 		self.assertEqual(("Color", "Color"), parse_typeddictionary_types("typeddictionary::Color;Color"))
 		self.assertEqual("number | bigint", godot_type_to_ts("int", is_input=True))
-		self.assertEqual("number", godot_type_to_ts("int", is_input=False))
+		self.assertEqual("number | bigint", godot_type_to_ts("int", is_input=False))
+		self.assertEqual("number", godot_type_to_ts("int", is_input=False, meta="int32"))
+		self.assertEqual("NodePath | string", godot_type_to_ts("NodePath", is_input=True))
+		self.assertEqual("NodePath", godot_type_to_ts("NodePath", is_input=False))
 		self.assertEqual("GDArray | Array<Node>", godot_type_to_ts("typedarray::Node", is_input=True))
+		self.assertEqual("GDArray | Array<NodePath | string>", godot_type_to_ts("typedarray::NodePath", is_input=True))
 		self.assertEqual(
 			"Array<{ [key: string]: VariantArgument } | Map<VariantArgument, VariantArgument>>",
 			godot_type_to_ts("typedarray::27/0:"),
 		)
 		self.assertEqual(
-			"GDDictionary | Map<number | bigint, string>",
+			"GDDictionary | Map<number | bigint, GDString | StringName | string>",
 			godot_type_to_ts("typeddictionary::int;String", is_input=True),
 		)
 		self.assertEqual(
-			"GDDictionary | Record<string, number> | Map<string, number>",
+			"GDDictionary | Record<string, number | bigint> | Map<GDString | StringName | string, number | bigint>",
 			godot_type_to_ts("typeddictionary::String;int", is_input=True),
+		)
+		self.assertEqual(
+			"GDDictionary | Record<string, NodePath | string> | Map<GDString | StringName | string, NodePath | string>",
+			godot_type_to_ts("typeddictionary::String;NodePath", is_input=True),
 		)
 		self.assertEqual(
 			"{ [key: string]: VariantArgument } | Map<VariantArgument, VariantArgument>",
@@ -86,8 +98,30 @@ class GeneratorOutputTests(unittest.TestCase):
 			godot_type_to_ts("PackedStringArray", is_input=True),
 		)
 
+	def test_property_accessor_resolution_is_shared_and_stable(self):
+		from generator.utils.binding_policy import (
+			builtin_operator_method_name,
+			method_conflicts_with_builtin_member,
+			resolve_property_accessor,
+			variant_operator_enum_name,
+		)
+
+		method_names = {"get_value", "set_value", "get_private_value"}
+		self.assertEqual("get_value", resolve_property_accessor("get_value", method_names))
+		self.assertEqual("get_private_value", resolve_property_accessor("_get_private_value", method_names))
+		self.assertIsNone(resolve_property_accessor("_get_missing_value", method_names))
+		self.assertIsNone(resolve_property_accessor("", method_names))
+		self.assertTrue(method_conflicts_with_builtin_member("get_x", {"x", "y"}))
+		self.assertTrue(method_conflicts_with_builtin_member("set_y", {"x", "y"}))
+		self.assertFalse(method_conflicts_with_builtin_member("get_length", {"x", "y"}))
+		self.assertEqual("not_equal", builtin_operator_method_name("!="))
+		self.assertEqual("negate", builtin_operator_method_name("unary-"))
+		self.assertIsNone(builtin_operator_method_name("in"))
+		self.assertIsNone(builtin_operator_method_name("not"))
+		self.assertEqual("OP_NOT_EQUAL", variant_operator_enum_name("!="))
+
 	def test_builtin_argument_matching_accepts_js_arrays_for_array_types(self):
-		from generator.builtin.builtin_classes_generator import napi_match_expr
+		from generator.builtin_classes_generator import napi_match_expr
 
 		self.assertEqual("(info[0].IsNumber() || info[0].IsBigInt())", napi_match_expr("int", 0))
 		self.assertEqual("info[0].IsNumber()", napi_match_expr("float", 0))
@@ -106,7 +140,9 @@ class GeneratorOutputTests(unittest.TestCase):
 
 		self.assertEqual('info.Env().Null()', default_arg_napi_expr({"type": "Variant", "default_value": "null"}))
 		self.assertEqual('Napi::Boolean::New(info.Env(), true)', default_arg_napi_expr({"type": "bool", "default_value": "true"}))
-		self.assertEqual('Napi::Number::New(info.Env(), static_cast<double>(42))', default_arg_napi_expr({"type": "int", "default_value": 42}))
+		self.assertEqual('gode::godot_int_to_napi(info.Env(), static_cast<int64_t>(42))', default_arg_napi_expr({"type": "int", "default_value": 42}))
+		self.assertEqual('gode::godot_uint_to_napi(info.Env(), static_cast<uint64_t>(42))', default_arg_napi_expr({"type": "int", "meta": "uint64", "default_value": 42}))
+		self.assertEqual('gode::godot_int_to_napi(info.Env(), static_cast<int64_t>(7))', default_arg_napi_expr({"type": "enum::Error", "default_value": 7}))
 		self.assertEqual('gode::godot_to_napi(info.Env(), godot::Array())', default_arg_napi_expr({"type": "typedarray::Node", "default_value": "[]"}))
 		self.assertEqual('gode::godot_to_napi(info.Env(), godot::Vector3(1, 2, 3))', default_arg_napi_expr({"type": "Vector3", "default_value": "Vector3(1, 2, 3)"}))
 		self.assertEqual('gode::godot_to_napi(info.Env(), godot::String("ok"))', default_arg_napi_expr({"type": "String", "default_value": '"ok"'}))
@@ -122,9 +158,39 @@ class GeneratorOutputTests(unittest.TestCase):
 
 		for member in ("ok_hsl_h", "ok_hsl_s", "ok_hsl_l"):
 			compat = builtin_member_compat("Color", member)
-			self.assertEqual("utils/color_okhsl_compat.h", compat["include"])
+			self.assertEqual("runtime/color_okhsl_compat.h", compat["include"])
 			self.assertIn(member, compat["getter"])
 			self.assertIn(member, compat["setter"])
+
+	def test_extension_api_loader_fails_fast_for_missing_or_incomplete_api(self):
+		from generator.utils import api_data
+
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = pathlib.Path(temp_dir)
+			missing_path = root / "missing_extension_api.json"
+			with mock.patch.object(api_data, "find_extension_api_json", return_value=str(missing_path)):
+				with self.assertRaisesRegex(FileNotFoundError, "extension_api.json not found"):
+					api_data.load_extension_api_json()
+
+			api_path = root / "extension_api.json"
+			api_path.write_text(json.dumps({"classes": []}), encoding="utf-8")
+			with mock.patch.object(api_data, "find_extension_api_json", return_value=str(api_path)):
+				with self.assertRaisesRegex(KeyError, "builtin_classes"):
+					api_data.load_extension_api_json(required_keys=("classes", "builtin_classes"))
+
+	def test_generator_entrypoint_returns_nonzero_when_a_generator_fails(self):
+		from generator import generator as entrypoint
+
+		class FailingGenerator:
+			def __init__(self, template_dir, config):
+				pass
+
+			def run(self):
+				raise RuntimeError("synthetic generator failure")
+
+		with mock.patch.object(entrypoint, "GENERATOR_CLASSES", (FailingGenerator,)):
+			with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+				self.assertEqual(1, entrypoint.main())
 
 
 if __name__ == "__main__":

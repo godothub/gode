@@ -1,0 +1,1 @@
+"""Gode binding generator package."""

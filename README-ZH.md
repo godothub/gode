@@ -1,8 +1,8 @@
 # Gode
 
-[EN Doc](https://github.com/godothub/gode) &nbsp;&nbsp;&nbsp; [中文文档](https://github.com/godothub/gode/blob/main/README-ZH.md)
+[EN Doc](https://godothub.github.io/gode) &nbsp;&nbsp;&nbsp; [中文文档](https://godothub.github.io/gode/zh)
 
-Godot引擎的JavaScript/TypeScript支持，底层采用V8引擎和NodeJS，运行在所有原生平台！
+Godot 引擎的 JavaScript/TypeScript 脚本支持，运行在所有原生平台！
 
 | 平台 | Windows | Android | macOS | iOS | Linux |
 | --- | --- | --- | --- | --- | --- |
@@ -27,23 +27,24 @@ my_project
 │       ├── gode.gd.uid
 │       ├── plugin.cfg
 │       ├── runtime
+│       ├── tsc
 │       └── types
 ```
 
 3. 打开 Godot，进入 `项目 > 项目设置 > 插件`。
 4. 找到 `gode`，勾选启用。
 
-启用后，创建脚本时可以选择 `JavaScript` 或 `TypeScript`。
+启用后，创建 Godot 脚本时选择 `TypeScript`。
 
-### 2. 编写 JavaScript 脚本
+### 2. 编写 TypeScript 脚本
 
-创建 `res://scripts/hello.js`：
+创建 `res://scripts/hello.ts`：
 
-```js
+```ts
 import { Node } from "godot";
 
 export default class Hello extends Node {
-	_ready() {
+	_ready(): void {
 		console.log("Hello from Gode");
 	}
 }
@@ -51,15 +52,13 @@ export default class Hello extends Node {
 
 然后在 Godot 编辑器中，把这个脚本挂到任意节点上运行。
 
-JavaScript 脚本可以使用 `import { Node } from "godot"` 这类写法引入 Godot 类型，也可以使用相对路径导入项目中的其他 `.js` 文件：
-
-```js
-import { PlayerState } from "./player_state.js";
-```
+TypeScript 脚本可以使用 `import { Node } from "godot"` 这类写法引入 Godot 类型。
 
 ### 3. 使用 npm 包
 
-如果只写普通 JavaScript 脚本，不需要额外配置。需要使用 NPM 包时，在项目根目录初始化 npm：
+示例项目不包含 `npm` 外部依赖，因此可以直接打开运行，不需要系统安装 Node.js。只有项目根目录存在 `package.json` 或 `node_modules` 时，Gode 才会把它视为外部依赖项目，并在导出时要求环境中存在 Node.js/npm 基础工具链。
+
+需要使用外部 npm 包时，在项目根目录自行初始化包管理器。例如：
 
 ```bash
 npm init -y
@@ -71,93 +70,46 @@ npm init -y
 npm install lodash
 ```
 
-在脚本中使用：
+pnpm、yarn 等项目也可以使用对应工具初始化和安装依赖，例如 `pnpm init` / `pnpm add lodash`。Gode 不会自动初始化项目，也不会自动安装依赖；这些步骤由项目本身的开发流程负责。
 
-```js
+在 TypeScript 脚本中使用：
+
+```ts
 import { Node } from "godot";
 import lodash from "lodash";
 
 export default class Demo extends Node {
-	_ready() {
+	_ready(): void {
 		console.log(lodash.camelCase("hello gode"));
 	}
 }
 ```
 
-Gode 会从项目根目录的 `node_modules`（即 `res://node_modules`）中解析 npm 包。导出项目时也需要包含这些运行时文件，详见[导出项目](#导出项目)。
-
-### 4. 使用 TypeScript
-
-Godot 场景和 autoload 可以挂载 `.ts` / `.tsx` 脚本。Gode 会从 `res://dist` 加载对应的编译后 JavaScript 文件。建议在项目根目录创建 `tsconfig.json`：
-
-```json
-{
-	"compilerOptions": {
-		"target": "ES2022",
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
-		"strict": true,
-		"rootDir": ".",
-		"outDir": "dist",
-		"paths": {
-			"godot": ["./addons/gode/types/godot.d.ts"]
-		},
-		"types": ["node"]
-	},
-	"include": ["scripts/**/*.ts", "addons/gode/types/**/*.d.ts"],
-	"exclude": ["dist", "node_modules"]
-}
-```
-
-安装 TypeScript 和 Node 类型：
-
-```bash
-npm install -D typescript @types/node
-```
-
-创建 `res://scripts/hello.ts`：
-
-```ts
-import { Node } from "godot";
-
-export default class Hello extends Node {
-	_ready(): void {
-		console.log("Hello from TypeScript");
-	}
-}
-```
-
-开发时需要自行运行 TypeScript 编译器：
-
-```bash
-npx tsc --watch
-```
-
 ## 进阶用法
 
-### JavaScript 与 GDScript 互相调用
+### TypeScript 与 GDScript 互相调用
 
 下面是一个完整的节点结构示例：
 
 ```text
 Main
-├── JsPlayer      # 挂 res://scripts/player_logic.js
+├── TsPlayer      # 挂 res://scripts/player_logic.ts
 └── GdTarget      # 挂 res://scripts/gd_target.gd
 ```
 
-`res://scripts/player_logic.js`：
+`res://scripts/player_logic.ts`：
 
-```js
+```ts
 import { Node } from "godot";
 
 export default class PlayerLogic extends Node {
-	say_hello(name) {
+	say_hello(name: string): string {
 		return `hi ${name}`;
 	}
 
-	call_gd_target() {
+	call_gd_target(): unknown {
 		const target = this.get_node("../GdTarget");
-		return target.call("some_method", "from JavaScript");
+		return target.call("some_method", "from TypeScript");
 	}
 }
 ```
@@ -168,40 +120,40 @@ export default class PlayerLogic extends Node {
 extends Node
 
 func _ready() -> void:
-	var js_result = $"../JsPlayer".say_hello("Godot")
-	print(js_result) # hi Godot
+	var ts_result = $"../TsPlayer".say_hello("Godot")
+	print(ts_result) # hi Godot
 
-	var gd_result = $"../JsPlayer".call_gd_target()
-	print(gd_result) # gd received from JavaScript
+	var gd_result = $"../TsPlayer".call_gd_target()
+	print(gd_result) # gd received from TypeScript
 
 func some_method(message: String) -> String:
 	return "gd received " + message
 ```
 
-GDScript 调 JavaScript 脚本方法时，可以像调用普通节点脚本一样直接调用：
+GDScript 调 TypeScript 脚本方法时，可以像调用普通节点脚本一样直接调用：
 
 ```gdscript
-var result = $"../JsPlayer".say_hello("Godot")
+var result = $"../TsPlayer".say_hello("Godot")
 ```
 
-JavaScript 调 GDScript 方法时，推荐通过 Godot 的通用 `call()` 调用：
+TypeScript 调 GDScript 方法时，推荐通过 Godot 的通用 `call()` 调用：
 
-```js
+```ts
 const target = this.get_node("../GdTarget");
-const result = target.call("some_method", "from JavaScript");
+const result = target.call("some_method", "from TypeScript");
 ```
 
-如果希望降低耦合，推荐使用 Godot 信号。JavaScript 自定义信号的写法见[声明信号](#声明信号)。
+如果希望降低耦合，推荐使用 Godot 信号。TypeScript 自定义信号的写法见[声明信号](#声明信号)。
 
 ### Godot 类型与单例
 
 可以从 `godot` 模块导入 Godot 类、内置 Variant 类型和运行时 singleton：
 
-```js
+```ts
 import { DisplayServer, Node3D, ResourceLoader, Vector3 } from "godot";
 
 export default class Demo extends Node3D {
-	_ready() {
+	_ready(): void {
 		console.log(DisplayServer.get_name());
 
 		const scene = ResourceLoader.load("res://scenes/marker.tscn");
@@ -212,21 +164,21 @@ export default class Demo extends Node3D {
 }
 ```
 
-Gode 2.0 只通过 `godot` 模块暴露 Godot API。需要什么类和 singleton，就显式 import 什么。生成的 `globals.d.ts` 只声明脚本装饰器辅助函数和导出元数据类型，不会再把 `Node`、`ResourceLoader`、`Engine` 这类 Godot API 自动声明成全局可用的名称。
+Gode 只通过 `godot` 模块暴露 Godot API。需要什么类和 singleton，就显式 import 什么。生成的 `globals.d.ts` 只声明脚本装饰器辅助函数和导出元数据类型，不会再把 `Node`、`ResourceLoader`、`Engine` 这类 Godot API 自动声明成全局可用的名称。
 
-### JavaScript Autoload
+### TypeScript Autoload
 
-只要脚本的默认导出继承自 Godot 基类，例如 `Node`，JavaScript 脚本就可以作为 Godot autoload 使用：
+只要脚本的默认导出继承自 Godot 基类，例如 `Node`，TypeScript 脚本就可以作为 Godot autoload 使用：
 
-```js
+```ts
 import { Node } from "godot";
 
 export default class Settings extends Node {
-	_ready() {
+	_ready(): void {
 		this.load_settings();
 	}
 
-	load_settings() {
+	load_settings(): void {
 		// 在这里初始化全局设置。
 	}
 }
@@ -237,21 +189,21 @@ export default class Settings extends Node {
 ```ini
 [autoload]
 
-Settings="*res://menu/settings.js"
+Settings="*res://menu/settings.ts"
 ```
 
 其他脚本中通过场景树访问：
 
-```js
+```ts
 const settings = this.get_node("/root/Settings");
 settings.load_settings();
 ```
 
 ### 导出属性与工具脚本
 
-使用静态 `exports` 可以把 JavaScript 字段暴露为 Godot 脚本属性。导出的属性会出现在 Inspector 中，并可以被场景和资源序列化。
+使用静态 `exports` 可以把 TypeScript 字段暴露为 Godot 脚本属性。导出的属性会出现在 Inspector 中，并可以被场景和资源序列化。
 
-```js
+```ts
 import { Node3D, Vector3 } from "godot";
 
 export default class Spawner extends Node3D {
@@ -271,7 +223,7 @@ export default class Spawner extends Node3D {
 
 如果脚本需要在编辑器中运行，可以设置 `static tool = true`：
 
-```js
+```ts
 export default class Preview extends Node3D {
 	static tool = true;
 }
@@ -281,7 +233,7 @@ export default class Preview extends Node3D {
 
 自定义脚本信号可以通过静态 `signals` 对象声明。Gode 会把这些信息暴露给 Godot 的脚本元数据接口，因此 `has_signal()`、`connect()` 以及编辑器/运行时的信号发现都可以正常工作。
 
-```js
+```ts
 import { Node } from "godot";
 
 export default class Menu extends Node {
@@ -290,7 +242,7 @@ export default class Menu extends Node {
 		quit: [],
 	};
 
-	_on_start_pressed() {
+	_on_start_pressed(): void {
 		this.emit_signal("replace_main_scene", this.next_scene);
 	}
 }
@@ -300,54 +252,21 @@ export default class Menu extends Node {
 
 也可以直接连接已有的 Godot 信号：
 
-```js
+```ts
 button.connect("pressed", () => {
 	console.log("button pressed");
 });
 ```
 
-### RPC 元数据
-
-需要通过 Godot 多人 RPC 调用的方法，必须使用静态 `rpc_config` 声明 RPC 元数据：
-
-```js
-import { CharacterBody3D } from "godot";
-
-export default class Robot extends CharacterBody3D {
-	static rpc_config = {
-		hit: { mode: "authority", call_local: true },
-		play_effect: { mode: "any_peer", call_local: true, transfer_mode: "reliable", channel: 0 },
-	};
-
-	hit() {
-		this.health -= 1;
-	}
-
-	play_effect() {
-		this.effect.restart();
-	}
-}
-```
-
-声明元数据后，就可以用 Godot 标准 RPC 调用 JavaScript 方法：
-
-```js
-if (target.has_method("hit")) {
-	target.rpc("hit");
-}
-```
-
-`mode` 支持 `"authority"`、`"any_peer"` 和 `"disabled"`。`transfer_mode` 支持 `"reliable"`、`"unreliable"` 和 `"unreliable_ordered"`。未填写的字段会使用 Godot 默认值。
-
 ### 加载资源与实例化场景
 
-JavaScript 中加载的资源是普通 Godot 资源，在 JavaScript wrapper 持有期间会保持正确的 Godot 生命周期：
+TypeScript 中加载的资源是普通 Godot 资源，在 JavaScript wrapper 持有期间会保持正确的 Godot 生命周期：
 
-```js
+```ts
 import { Node, ResourceLoader } from "godot";
 
 export default class SceneSpawner extends Node {
-	_ready() {
+	_ready(): void {
 		const menuScene = ResourceLoader.load("res://menu/menu.tscn");
 		const menu = menuScene.instantiate();
 		this.add_child(menu);
@@ -357,101 +276,17 @@ export default class SceneSpawner extends Node {
 
 如果资源后续还会复用，像 GDScript 中一样保留引用即可：
 
-```js
+```ts
 import { Node, ResourceLoader } from "godot";
 
 export default class LevelLoader extends Node {
-	_ready() {
+	_ready(): void {
 		this.levelScene = ResourceLoader.load("res://level/level.tscn");
 		this.add_child(this.levelScene.instantiate());
 	}
 }
 ```
 
-### 调试
-
-脚本层调试可以使用 `console.log()` / `console.error()`。输出会显示在 Godot 输出面板和启动 Godot 的终端中。
-
-当 JavaScript 异常穿过 Godot 调用边界时，Gode 会把它报告为 Godot 脚本错误。如果问题只在运行时出现，也建议从终端启动 Godot，这样 Node/V8 警告和原生扩展信息也能看到。
-
-### TypeScript 工作流
-
-Gode 运行时执行 JavaScript，所以 TypeScript 是源码语言：Godot 场景中挂载 `.ts` / `.tsx` 脚本，运行前把它们编译到 `res://dist` 下对应的 JavaScript 文件：
-
-```text
-res://scripts/player.ts        -> res://dist/scripts/player.js
-res://ui/main_menu.ts          -> res://dist/ui/main_menu.js
-res://systems/save_state.ts    -> res://dist/systems/save_state.js
-```
-
-脚本元数据继续写在默认导出的 TypeScript 类上，和 JavaScript 写法一致。`signals`、`rpc_config`、`exports`、`tool` 这些静态字段会保留到编译后的输出中：
-
-```ts
-import { Node } from "godot";
-
-export default class Player extends Node {
-	static signals = {
-		died: [],
-	};
-
-	static rpc_config = {
-		hit: { mode: "authority", call_local: true },
-	};
-}
-```
-
-TypeScript 源码中的本地相对导入，建议直接写运行时需要的 `.js` 后缀，这样编译后的文件可以被 Node/V8 直接加载：
-
-```ts
-import { PlayerState } from "./player_state.js";
-```
-
-常见做法是在 `package.json` 中放置开发和构建命令：
-
-```json
-{
-	"scripts": {
-		"dev": "tsc --watch",
-		"build": "tsc --pretty false"
-	}
-}
-```
-
-开发时运行 `npm run dev`，导出项目或提交生成的 `dist` 文件前运行 `npm run build`。
-
-### 导出项目
-
-Gode 会从项目根目录的 `node_modules` 中解析 npm 包。导出预设应包含运行时 JavaScript/JSON 文件、`dist`、`node_modules` 和 `package.json`。示例项目使用 `all_resources`，这是偏保守、优先保证导出后可运行的方式。
-
-依赖裁剪、打包、npm 原生插件处理、生产依赖安装等应放在项目自己的构建流程里。这样 Gode 可以兼容 npm、pnpm、yarn、bun 和自定义构建方式。
-
 ## 精选案例
 
-- [tps-demo-js](https://github.com/godothub/tps-demo-js)：官方 tps-demo 示例的 JavaScript 版本
-- [tps-demo-ts](https://github.com/godothub/tps-demo-ts)：官方 tps-demo 示例的 TypeScript 版本
-
-## 常见问题
-
-**启用插件后看不到 JavaScript / TypeScript 脚本类型**
-
-确认插件目录是 `res://addons/gode`，并且 `res://addons/gode/plugin.cfg` 存在。然后重新启用插件或重启 Godot。
-
-**JavaScript autoload 无法实例化**
-
-确认 autoload 条目指向 `.js` 文件，并且脚本的默认导出类继承自 Godot 基类，例如 `Node`。Gode 会通过这份继承元数据创建 autoload 实例。
-
-**TypeScript 脚本没有被编译**
-
-Gode 只加载编译后的 JavaScript 输出。请确认项目根目录存在 `tsconfig.json`，已安装 `typescript`，并且你的构建/监听命令正在运行，例如 `npx tsc --watch`。
-
-**`rpc()` 无法调用 JavaScript 方法**
-
-请在 JavaScript 类上用 `static rpc_config` 声明该方法。只有脚本报告了 RPC 元数据后，Godot 才会把对应方法暴露给 RPC。
-
-**运行时找不到 npm 包**
-
-确认依赖安装在 Godot 项目根目录的 `node_modules` 中，并且导出预设包含运行时 JavaScript 文件、`dist`、`node_modules` 和 `package.json`。npm 原生插件（`.node` 二进制）仍可能需要按具体包单独处理。
-
-**导出后插件无法加载**
-
-确认当前导出平台在支持列表中，并且 `addons/gode/binary/gode.gdextension` 中对应平台的二进制文件存在。
+- [tps-demo-ts](https://github.com/godothub/gode-tps-demo)：官方 tps-demo 示例的 TypeScript 版本

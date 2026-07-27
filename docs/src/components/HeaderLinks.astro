@@ -1,0 +1,26 @@
+---
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+---
+
+<a class="community-link" href="https://godothub.com" rel="me">
+  GodotHub
+</a>
+<SocialIcons />
+
+<style>
+  @layer starlight.components {
+    .community-link {
+      color: var(--sl-color-text-accent);
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .community-link:hover,
+    .community-link:focus-visible {
+      color: var(--sl-color-white);
+    }
+  }
+</style>

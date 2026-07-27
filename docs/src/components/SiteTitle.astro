@@ -1,0 +1,36 @@
+---
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+const logoUrl = 'https://legacy.godothub.com/icon/godothub.png';
+---
+
+<a href={siteTitleHref} class="site-title sl-flex">
+  <img alt="GodotHub" src={logoUrl} width="26" height="26" />
+  <span translate="no">{siteTitle}</span>
+</a>
+
+<style>
+  @layer starlight.core {
+    .site-title {
+      align-items: center;
+      gap: var(--sl-nav-gap);
+      font-size: var(--sl-text-h4);
+      font-weight: 600;
+      color: var(--sl-color-text-accent);
+      text-decoration: none;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .site-title img {
+      height: 1.625rem;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      object-position: 0 50%;
+    }
+
+    .site-title span {
+      overflow: hidden;
+    }
+  }
+</style>

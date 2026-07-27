@@ -47,6 +47,14 @@ required_files=(
 	"plugin.cfg"
 	"gode.gd"
 	"binary/gode.gdextension"
+	"config/gode.json"
+	"config/tsconfig.json"
+	"icons/typescript.svg"
+	"runtime/event_loop.gd"
+	"runtime/export_plugin.gd"
+	"runtime/typescript_compiler.js"
+	"types/globals.d.ts"
+	"types/godot.d.ts"
 )
 required_binaries=(
 	"binary/windows/x64/libgode.dll"
@@ -75,6 +83,16 @@ fi
 rm -rf "$staging_root"
 mkdir -p "$staged_addon_root" "$output_directory"
 cp -R "$addon_root"/. "$staged_addon_root"/
+find "$staged_addon_root" -type f -name '*.import' -delete
+
+"$script_dir/prepare-typescript.sh" --output-directory "$staged_addon_root/tsc"
+
+for file in "tsc/package.json" "tsc/lib/typescript.js"; do
+	if [ ! -f "$staged_addon_root/$file" ]; then
+		printf 'Missing packaged TypeScript compiler file: %s\n' "$file" >&2
+		exit 1
+	fi
+done
 
 find "$staged_addon_root/binary" -type f \( -name '*.lib' -o -name '*.exp' -o -name '*.pdb' -o -name '*.ilk' \) -delete
 

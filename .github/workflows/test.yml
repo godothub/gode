@@ -8,15 +8,24 @@ on:
         description: Download URL for libnode.zip
         required: false
         type: string
+      plugin_artifact_name:
+        description: Packaged plugin artifact to smoke test instead of building Linux locally
+        required: false
+        type: string
   workflow_call:
     inputs:
       libnode_url:
         description: Download URL for libnode.zip
         required: false
         type: string
+      plugin_artifact_name:
+        description: Packaged plugin artifact to smoke test instead of building Linux locally
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 env:
   PYTHON_VERSION: "3.14"
@@ -55,6 +64,10 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare TypeScript compiler
+        shell: bash
+        run: ./.github/shell/prepare-typescript.sh
+
       - name: Run repository integrity tests
         run: python -m unittest discover -s test
 
@@ -77,7 +90,47 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r generator/requirements.txt
 
+      - name: Download packaged plugin
+        if: ${{ inputs.plugin_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.plugin_artifact_name }}
+          path: ${{ runner.temp }}/gode-plugin
+
+      - name: Install packaged plugin
+        if: ${{ inputs.plugin_artifact_name != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gode-plugin/gode.zip"
+          package_root="$RUNNER_TEMP/gode-package"
+
+          if [ ! -f "$archive" ]; then
+            echo "Packaged plugin archive was not found: $archive" >&2
+            exit 1
+          fi
+
+          rm -rf "$package_root" example/addons/gode
+          mkdir -p "$package_root" example/addons
+          unzip -q "$archive" -d "$package_root"
+
+          if [ ! -f "$package_root/gode/plugin.cfg" ]; then
+            echo "Packaged plugin is missing plugin.cfg" >&2
+            exit 1
+          fi
+          if [ ! -f "$package_root/gode/binary/linux/x64/libgode.so" ]; then
+            echo "Packaged plugin is missing the Linux x64 binary" >&2
+            exit 1
+          fi
+          if [ ! -f "$package_root/gode/tsc/lib/typescript.js" ]; then
+            echo "Packaged plugin is missing the TypeScript compiler" >&2
+            exit 1
+          fi
+
+          mv "$package_root/gode" example/addons/gode
+
       - name: Mask libnode URL
+        if: ${{ inputs.plugin_artifact_name == '' }}
         shell: bash
         env:
           LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
@@ -87,6 +140,7 @@ jobs:
           fi
 
       - name: Prepare libnode
+        if: ${{ inputs.plugin_artifact_name == '' }}
         shell: bash
         env:
           LIBNODE_URL: ${{ inputs.libnode_url || secrets.LIBNODE_URL }}
@@ -95,8 +149,14 @@ jobs:
           --url "$LIBNODE_URL"
 
       - name: Build Linux
+        if: ${{ inputs.plugin_artifact_name == '' }}
         shell: bash
         run: ./shell/build-linux.sh --arch x64 --config Release --fresh
+
+      - name: Prepare TypeScript compiler
+        if: ${{ inputs.plugin_artifact_name == '' }}
+        shell: bash
+        run: ./.github/shell/prepare-typescript.sh
 
       - name: Download Godot
         shell: bash

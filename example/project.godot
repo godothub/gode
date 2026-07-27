@@ -12,7 +12,7 @@ config_version=5
 
 config/name="gode-example"
 run/main_scene="res://scenes/main_menu.tscn"
-config/features=PackedStringArray("4.6", "GL Compatibility")
+config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/stretch_mode=0
 boot_splash/use_filter=false
 boot_splash/image="uid://blhgh808br6o6"
@@ -26,6 +26,10 @@ EventLoop="*res://addons/gode/runtime/event_loop.gd"
 
 enabled=PackedStringArray("res://addons/gode/plugin.cfg")
 
+[native_extensions]
+
+paths=["res://addons/gode/binary/gode.gdextension"]
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
@@ -33,6 +37,5 @@ enabled=PackedStringArray("res://addons/gode/plugin.cfg")
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="forward_plus"
 textures/vram_compression/import_etc2_astc=true

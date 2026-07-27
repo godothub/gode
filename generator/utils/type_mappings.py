@@ -217,12 +217,19 @@ def default_arg_napi_expr(arg, env_expr='info.Env()'):
         return f"{env_expr}.Undefined()"
 
     arg_type = arg.get('type')
+    arg_meta = arg.get('meta', '')
     if value in ('null', 'nullptr'):
         return f"{env_expr}.Null()"
     if arg_type == 'bool' or value in ('true', 'false'):
         return f"Napi::Boolean::New({env_expr}, {value})"
-    if arg_type in ('int', 'float') or isinstance(value, (int, float)):
+    if arg_type == 'int':
+        if arg_meta.startswith('uint') or arg_meta in ('char16', 'char32'):
+            return f"gode::godot_uint_to_napi({env_expr}, static_cast<uint64_t>({value}))"
+        return f"gode::godot_int_to_napi({env_expr}, static_cast<int64_t>({value}))"
+    if arg_type == 'float' or isinstance(value, float):
         return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+    if isinstance(value, int):
+        return f"gode::godot_int_to_napi({env_expr}, static_cast<int64_t>({value}))"
     if isinstance(value, str) and arg_type and arg_type.startswith('typedarray::'):
         return f"gode::godot_to_napi({env_expr}, godot::Array())"
     if isinstance(value, str) and arg_type in GODOT_BUILTIN_TYPES:
@@ -241,7 +248,7 @@ def default_arg_napi_expr(arg, env_expr='info.Env()'):
             cpp_value = f"godot::{arg_type}({value})"
         return f"gode::godot_to_napi({env_expr}, {cpp_value})"
     if isinstance(value, str) and value.lstrip('-').isdigit():
-        return f"Napi::Number::New({env_expr}, static_cast<double>({value}))"
+        return f"gode::godot_int_to_napi({env_expr}, static_cast<int64_t>({value}))"
     if isinstance(value, str) and value.startswith('"'):
         return f"Napi::String::New({env_expr}, {value})"
     return f"{env_expr}.Undefined()"

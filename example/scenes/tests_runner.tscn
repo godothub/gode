@@ -1,14 +1,14 @@
 [gd_scene load_steps=4 format=3 uid="uid://5uvnhmsmksj8"]
 
 [ext_resource type="Script" path="res://scripts/tests/tests_runner.gd" id="1_runner"]
-[ext_resource type="Script" path="res://scripts/tests/signal_test.js" id="2_signaljs"]
-[ext_resource type="Script" path="res://scripts/tests/runtime_integration_test.js" id="3_runtimejs"]
+[ext_resource type="Script" path="res://scripts/tests/signal_test.ts" id="2_signalts"]
+[ext_resource type="Script" path="res://scripts/tests/runtime_integration_test.ts" id="3_runtimets"]
 
 [node name="TestsRunner" type="Node" unique_id=1924444567]
 script = ExtResource("1_runner")
 
 [node name="SignalTest" type="Node" parent="." unique_id=1926573262]
-script = ExtResource("2_signaljs")
+script = ExtResource("2_signalts")
 
 [node name="RuntimeIntegrationTest" type="Node" parent="." unique_id=1931083819]
-script = ExtResource("3_runtimejs")
+script = ExtResource("3_runtimets")

@@ -1,6 +1,6 @@
 #include "{{ header_include }}"
-#include "utils/func_utils.h"
-#include "utils/value_convert.h"
+#include "runtime/func_utils.h"
+#include "runtime/value_convert.h"
 #include <cmath>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -83,14 +83,14 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     // are exported as wrapped instances, so prototype properties make expressions like
     // ResourceLoader.THREAD_LOAD_LOADED work on singleton objects too.
     {% for constant in constants %}
-    func.As<Napi::Object>().Set("{{ constant.name }}", Napi::Number::New(env, static_cast<double>({{ constant.value }})));
+    func.As<Napi::Object>().Set("{{ constant.name }}", gode::godot_result_to_napi(env, {{ constant.value }}));
     {% endfor %}
     {% for enum in enums %}
     {
         Napi::Object enum_values = Napi::Object::New(env);
         {% for value in enum["values"] %}
-        enum_values.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
-        func.As<Napi::Object>().Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        enum_values.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+        func.As<Napi::Object>().Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
         {% endfor %}
         func.As<Napi::Object>().Set("{{ enum.name }}", enum_values);
     }
@@ -141,14 +141,14 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     prototype.Set(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "inspect"));
 
     {% for constant in constants %}
-    prototype.Set("{{ constant.name }}", Napi::Number::New(env, static_cast<double>({{ constant.value }})));
+    prototype.Set("{{ constant.name }}", gode::godot_result_to_napi(env, {{ constant.value }}));
     {% endfor %}
     {% for enum in enums %}
     {
         Napi::Object enum_values = Napi::Object::New(env);
         {% for value in enum["values"] %}
-        enum_values.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
-        prototype.Set("{{ value.name }}", Napi::Number::New(env, static_cast<double>({{ value.value }})));
+        enum_values.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+        prototype.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
         {% endfor %}
         prototype.Set("{{ enum.name }}", enum_values);
     }

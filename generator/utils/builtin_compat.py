@@ -1,4 +1,4 @@
-COLOR_OKHSL_COMPAT_INCLUDE = "utils/color_okhsl_compat.h"
+COLOR_OKHSL_COMPAT_INCLUDE = "runtime/color_okhsl_compat.h"
 
 BUILTIN_METHOD_COMPAT = {
     ("Color", "from_ok_hsl"): {

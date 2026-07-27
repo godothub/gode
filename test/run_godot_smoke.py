@@ -10,12 +10,14 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_MARKER = "[GodeTest] all tests passed"
+DEFAULT_EXTENSION = "res://addons/gode/binary/gode.gdextension"
 
 LEAK_RE = re.compile(
-	r"(WARNING|ERROR): .*leaked|Leaked instance:|Orphan StringName: (Gode|Javascript|Typescript)",
+	r"(WARNING|ERROR): .*leaked|Leaked instance:|Orphan StringName: (Gode|TypeScriptScript)",
 	re.IGNORECASE,
 )
 ERROR_RE = re.compile(r"^ERROR:", re.IGNORECASE)
+MACOS_CA_ERROR_RE = re.compile(r'^ERROR: Condition "ret != noErr" is true\. Returning: ""$')
 
 
 def candidate_godot_paths():
@@ -63,6 +65,35 @@ def resolve_godot(explicit_path):
 	raise FileNotFoundError("Godot executable was not found. Set GODOT_BIN or pass --godot.")
 
 
+def godot_resource_path(project, resource_path):
+	if not resource_path.startswith("res://"):
+		raise ValueError(f"Expected a res:// path, got: {resource_path}")
+	return project / resource_path.removeprefix("res://")
+
+
+def ensure_extension_list(project, extension_path):
+	if not extension_path:
+		return
+
+	manifest = godot_resource_path(project, extension_path)
+	if not manifest.exists():
+		raise FileNotFoundError(f"GDExtension manifest was not found: {manifest}")
+
+	godot_dir = project / ".godot"
+	extension_list = godot_dir / "extension_list.cfg"
+	if extension_list.exists():
+		lines = extension_list.read_text(encoding="utf-8").splitlines()
+		if extension_path in [line.strip() for line in lines]:
+			return
+	else:
+		lines = []
+
+	godot_dir.mkdir(exist_ok=True)
+	lines.append(extension_path)
+	extension_list.write_text("\n".join(lines) + "\n", encoding="utf-8")
+	print(f"[gode-smoke] Registered GDExtension: {extension_path}")
+
+
 def output_lines(output):
 	return output.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
@@ -79,12 +110,20 @@ def leak_lines(output):
 	return [line for line in output_lines(output) if LEAK_RE.search(line)]
 
 
+def is_known_nonfatal_error(lines, index):
+	line = lines[index]
+	if not MACOS_CA_ERROR_RE.search(line):
+		return False
+	return any("get_system_ca_certificates" in candidate for candidate in lines[index + 1:index + 4])
+
+
 def non_leak_error_lines(output):
-	lines = []
-	for line in output_lines(output):
-		if ERROR_RE.search(line) and not LEAK_RE.search(line):
-			lines.append(line)
-	return lines
+	lines = output_lines(output)
+	errors = []
+	for index, line in enumerate(lines):
+		if ERROR_RE.search(line) and not LEAK_RE.search(line) and not is_known_nonfatal_error(lines, index):
+			errors.append(line)
+	return errors
 
 
 def run_smoke(args):
@@ -92,6 +131,7 @@ def run_smoke(args):
 	project = (ROOT / args.project).resolve()
 	if not project.exists():
 		raise FileNotFoundError(f"Godot project directory was not found: {project}")
+	ensure_extension_list(project, args.extension)
 
 	command = [
 		str(godot),
@@ -147,6 +187,7 @@ def build_parser():
 	parser.add_argument("--godot", help="Path to the Godot executable. Defaults to GODOT_BIN or common install locations.")
 	parser.add_argument("--project", default="example", help="Path to the Godot project directory relative to the repo root.")
 	parser.add_argument("--scene", default="res://scenes/tests_runner.tscn", help="Godot scene path to run.")
+	parser.add_argument("--extension", default=DEFAULT_EXTENSION, help="GDExtension manifest path to register before running.")
 	parser.add_argument("--marker", default=DEFAULT_MARKER, help="Output marker that proves the JS test completed.")
 	parser.add_argument("--timeout", type=int, default=45, help="Seconds before the Godot process is terminated.")
 	parser.add_argument("--strict-exit-leaks", action="store_true", help="Fail if Godot reports exit-time leaks.")

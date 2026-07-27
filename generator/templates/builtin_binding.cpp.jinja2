@@ -1,6 +1,6 @@
 #include "{{ header_include }}"
-#include "utils/func_utils.h"
-#include "utils/value_convert.h"
+#include "runtime/func_utils.h"
+#include "runtime/value_convert.h"
 #include <cmath>
 #include <godot_cpp/core/object.hpp>
 {% if vararg_header_include %}
@@ -44,6 +44,18 @@ Napi::Object {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) 
     {% for constant in constants %}
     func.As<Napi::Object>().Set("{{ constant.name }}", gode::godot_to_napi(env, {{ constant.cpp_value }}));
     func.Get("prototype").As<Napi::Object>().Set("{{ constant.name }}", gode::godot_to_napi(env, {{ constant.cpp_value }}));
+    {% endfor %}
+    {% for enum in enums %}
+    {
+        Napi::Object enum_values = Napi::Object::New(env);
+        {% for value in enum["values"] %}
+        enum_values.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+        func.As<Napi::Object>().Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+        func.Get("prototype").As<Napi::Object>().Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+        {% endfor %}
+        func.As<Napi::Object>().Set("{{ enum.name }}", enum_values);
+        func.Get("prototype").As<Napi::Object>().Set("{{ enum.name }}", enum_values);
+    }
     {% endfor %}
 
     exports.Set("{{ js_class_name }}", func);
@@ -113,9 +125,16 @@ Napi::Value {{ class_name }}Binding::_to_string(const Napi::CallbackInfo& info) 
 {% if is_iterable_array %}
 Napi::Value {{ class_name }}Binding::_iterator(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    Napi::Array values = Napi::Array::New(env, static_cast<uint32_t>(instance.size()));
-    for (int64_t i = 0; i < instance.size(); i++) {
-        values.Set(static_cast<uint32_t>(i), gode::godot_to_napi(env, instance[i]));
+    uint32_t array_length = 0;
+    if (!gode::godot_array_length_to_uint32(env, instance.size(), "{{ js_class_name }} iterator", array_length)) {
+        return env.Undefined();
+    }
+    Napi::Array values = Napi::Array::New(env, array_length);
+    for (uint32_t i = 0; i < array_length; i++) {
+        values.Set(i, gode::godot_to_napi(env, instance[i]));
+        if (env.IsExceptionPending()) {
+            return env.Undefined();
+        }
     }
     return values.Get(Napi::Symbol::WellKnown(env, "iterator")).As<Napi::Function>().Call(values, {});
 }

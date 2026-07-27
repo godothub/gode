@@ -1,0 +1,20 @@
+{
+  "name": "gode-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.5",
+    "@astrojs/starlight": "^0.41.2",
+    "astro": "^7.0.6",
+    "typescript": "^6.0.3"
+  }
+}

@@ -30,12 +30,46 @@ jobs:
       libnode_url: ${{ inputs.libnode_url }}
     secrets: inherit
 
+  test:
+    needs: build
+    uses: ./.github/workflows/test.yml
+    with:
+      plugin_artifact_name: gode-plugin
+    secrets: inherit
+
   publish:
     name: Publish GitHub release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - test
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract changelog release notes
+        id: release_notes
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          awk -v version="$version" '
+            $0 == "## " version { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md |
+            sed '/./,$!d' |
+            sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$notes_file"
+          if [ ! -s "$notes_file" ]; then
+            echo "Release notes for $version were not found in CHANGELOG.md" >&2
+            exit 1
+          fi
+          echo "path=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Download packaged plugin
         uses: actions/download-artifact@v4
         with:
@@ -48,4 +82,5 @@ jobs:
           tag_name: ${{ inputs.tag }}
           name: ${{ inputs.tag }}
           prerelease: ${{ inputs.prerelease == 'true' }}
+          body_path: ${{ steps.release_notes.outputs.path }}
           files: dist/gode.zip

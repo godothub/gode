@@ -1,71 +1,52 @@
-import os
 import sys
-import importlib
-import pkgutil
-from core.base_generator import CodeGenerator
+from pathlib import Path
 
-# Configuration
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
-# Define base output directories for include and src
-INCLUDE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'include', 'generated')
-SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src', 'generated')
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from generator.builtin_classes_generator import BuiltinClassGenerator
+    from generator.class_generator import ClassGenerator
+    from generator.dts_generator import DtsGenerator
+    from generator.register_generator import RegisterGenerator
+    from generator.utility_functions_generator import UtilityFunctionsGenerator
+else:
+    from .builtin_classes_generator import BuiltinClassGenerator
+    from .class_generator import ClassGenerator
+    from .dts_generator import DtsGenerator
+    from .register_generator import RegisterGenerator
+    from .utility_functions_generator import UtilityFunctionsGenerator
 
-def discover_generators(package_name):
-    """
-    Dynamically discover all generator classes in the given package.
-    """
-    generators = []
-    package = importlib.import_module(package_name)
-    
-    # Iterate over all modules in the package
-    for _, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
-        if is_pkg:
-            continue
-            
-        try:
-            module = importlib.import_module(name)
-            # Find subclasses of CodeGenerator
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if isinstance(attr, type) and issubclass(attr, CodeGenerator) and attr is not CodeGenerator:
-                    generators.append(attr)
-        except ImportError as e:
-            print(f"Failed to import module {name}: {e}")
 
-    return sorted(generators, key=lambda cls: f"{cls.__module__}.{cls.__name__}")
+GENERATOR_CLASSES = (
+    BuiltinClassGenerator,
+    ClassGenerator,
+    RegisterGenerator,
+    UtilityFunctionsGenerator,
+    DtsGenerator,
+)
+
+GENERATOR_DIR = Path(__file__).resolve().parent
+ROOT_DIR = GENERATOR_DIR.parent
+TEMPLATE_DIR = GENERATOR_DIR / "templates"
+INCLUDE_DIR = ROOT_DIR / "include" / "generated"
+SRC_DIR = ROOT_DIR / "src" / "generated"
+
 
 def main():
     print(f"Using template directory: {TEMPLATE_DIR}")
     print(f"Using include directory: {INCLUDE_DIR}")
     print(f"Using src directory: {SRC_DIR}")
 
-    # Discover generators in builtin, class, utility, register packages
-    packages = ['builtin', 'class', 'register', 'dts']
-    all_generators = []
-
-    # Ensure current directory is in sys.path
-    sys.path.append(os.path.dirname(__file__))
-
-    for pkg in packages:
-        print(f"Scanning package: {pkg}...")
-        gens = discover_generators(pkg)
-        all_generators.extend(gens)
-        print(f"  Found {len(gens)} generators.")
-
-    # Run generators
+    print(f"Found {len(GENERATOR_CLASSES)} generators.")
     print("\nStarting code generation...")
     failed_generators = []
-    for gen_class in all_generators:
+    for gen_class in GENERATOR_CLASSES:
         print(f"Running {gen_class.__name__}...")
         try:
-            # We pass a tuple or dict of output directories, or let the generator decide based on arguments
-            # For backward compatibility with CodeGenerator init, we might need to adjust.
-            # Let's pass a config dict instead of a single output_dir
             config = {
-                'include_dir': INCLUDE_DIR,
-                'src_dir': SRC_DIR
+                "include_dir": str(INCLUDE_DIR),
+                "src_dir": str(SRC_DIR),
             }
-            generator = gen_class(TEMPLATE_DIR, config)
+            generator = gen_class(str(TEMPLATE_DIR), config)
             generator.run()
         except Exception as e:
             print(f"Error running {gen_class.__name__}: {e}")
