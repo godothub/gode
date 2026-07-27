@@ -1,3 +1,8 @@
+## 2.3.1
+
+- 增加 Godot 数字全局类型的 TypeScript 全局类型别名：`int` 现在解析为 `number | bigint`，与 64 位整数转换行为一致，`float` 解析为 `number`。
+- 加固发布流程：手动触发 release 时会拒绝带 `v` 前缀的 tag，并统一发布不带前缀的 SemVer tag 和 release 名称。
+
 ## 2.3.0
 
 - 改进内置 TypeScript 编译器：读取 `tsconfig.json` 的 `include`、`exclude`、`baseUrl`、`paths` 和解析后的 root files，通过 TypeScript `matchFiles` 处理 `res://` 虚拟路径，只为 program 实际包含的源文件生成输出，默认启用 TSX 的 `jsx: react`，项目源文件读取失败时明确报错而不是静默跳过，拒绝规整后越过 `res://` 根目录的 module specifier，并在 emit transformer 阶段将项目内路径别名 import/export 重写为运行时可解析的相对 `.js` 路径。
