@@ -5,13 +5,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import v8 from "node:v8";
 import vm from "node:vm";
-import { Color, Engine, GD, GDArray, GDString, GodotObject, Image, ImageTexture, Node, PackedInt32Array, PackedStringArray, PackedVector3Array, ResourceLoader, type VariantArgument, Vector2, Vector2i, Vector3 } from "godot";
+import { Color, Engine, GD, GDArray, GDString, GodotObject, Image, ImageTexture, Node, PackedInt32Array, PackedScene, PackedStringArray, PackedVector3Array, Resource, ResourceLoader, ResourceSaver, type VariantArgument, Vector2, Vector2i, Vector3 } from "godot";
 import cjsFixture, { makeCommonPayload } from "./commonjs_fixture.cjs";
 import * as RuntimeBaseModule from "./runtime_base_test.js";
 import { buildRuntimePayload, moduleMarker, waitForEventLoopTurn } from "./runtime_helpers.js";
 
 v8.setFlagsFromString("--expose-gc");
 const forceGarbageCollection = vm.runInNewContext("gc") as () => void;
+const GODOT_OK = 0;
+const VARIANT_TYPE_OBJECT = 24;
+const PROPERTY_HINT_RESOURCE_TYPE = 17;
+const PROPERTY_HINT_NODE_TYPE = 34;
 
 function assert(condition: boolean, message: string): void {
 	if (!condition) {
@@ -39,12 +43,25 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 		"enabled": { "type": "bool", "default": true as const },
 		"count": { "type": "int", "default": 7 as const },
 		"spawn_offset": { "type": "Vector3" },
+		"static_resource_default_first": { "default": null, "type": "Resource" },
+		"static_image": { "type": "Image", "default": null },
 	} satisfies ExportMap;
 
 	label = "runtime" as string;
 	enabled = true as boolean;
 	count = 7 as number;
 	spawn_offset = new Vector3(4, 5, 6) as Vector3;
+	static_resource_default_first = null as Resource | null;
+	static_image = null as Image | null;
+
+	@Export()
+	resource_slot: Resource | null = null;
+
+	@Export()
+	image_slot: Image | null = null;
+
+	@Export()
+	node_slot: Node | null = null;
 
 	run_test(): void {
 		void this.run();
@@ -130,14 +147,44 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 			nodeAssert.deepEqual(makeCommonPayload(3).values, [3, 4, 5]);
 			nodeAssert.equal(makeCommonPayload(3).total, 12);
 
-			const propertyList = this.get_property_list() as Array<{ name: VariantArgument; hint?: VariantArgument; hint_string?: VariantArgument }>;
+			const propertyList = this.get_property_list() as Array<{ name: VariantArgument; type?: VariantArgument; hint?: VariantArgument; hint_string?: VariantArgument; class_name?: VariantArgument }>;
 			const propertyNames = propertyList.map(property => String(property.name));
+			const getExportProperty = (name: string) => {
+				const property = propertyList.find(item => String(item.name) === name);
+				if (!property) {
+					throw new Error(`${name} export metadata missing from property list`);
+				}
+				return property;
+			};
+			const assertObjectExportMetadata = (name: string, hint: number, hintString: string) => {
+				const property = getExportProperty(name);
+				nodeAssert.equal(Number(property.type), VARIANT_TYPE_OBJECT);
+				nodeAssert.equal(Number(property.hint), hint);
+				nodeAssert.equal(String(property.hint_string), hintString);
+				nodeAssert.equal(String(property.class_name), hintString);
+			};
+			const findPackedScenePropertyValue = (scene: PackedScene, propertyName: string): VariantArgument => {
+				const state = scene.get_state();
+				for (let nodeIndex = 0; nodeIndex < Number(state.get_node_count()); nodeIndex++) {
+					for (let propertyIndex = 0; propertyIndex < Number(state.get_node_property_count(nodeIndex)); propertyIndex++) {
+						if (String(state.get_node_property_name(nodeIndex, propertyIndex)) === propertyName) {
+							return state.get_node_property_value(nodeIndex, propertyIndex);
+						}
+					}
+				}
+				throw new Error(`packed scene property was not saved: ${propertyName}`);
+			};
+
 			assert(this.property_can_revert("label"), "exported string property cannot revert");
 			assert(this.property_can_revert("inherited_label"), `inherited exported string property cannot revert; properties: ${propertyNames.join(", ")}`);
 			assert(this.property_can_revert("spawn_offset"), "exported Vector3 property cannot revert");
+			assert(this.property_can_revert("resource_slot"), "exported Resource property cannot revert");
+			assert(this.property_can_revert("static_resource_default_first"), "static exported Resource property cannot revert");
 			nodeAssert.equal(this.property_get_revert("label"), "runtime");
 			nodeAssert.equal(this.property_get_revert("inherited_label"), "base-runtime");
 			nodeAssert.equal(this.property_get_revert("inherited_count"), 11);
+			nodeAssert.equal(this.property_get_revert("resource_slot"), null);
+			nodeAssert.equal(this.property_get_revert("static_resource_default_first"), null);
 			const offset = this.property_get_revert("spawn_offset") as Vector3;
 			assert(offset.x === 4 && offset.y === 5 && offset.z === 6, "Vector3 revert value was not preserved");
 
@@ -148,21 +195,36 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 			nodeAssert.equal(this.enabled, false);
 			nodeAssert.equal(this.count, 9);
 
-			for (const name of ["label", "enabled", "count", "spawn_offset", "inherited_label", "inherited_count"]) {
+			for (const name of ["label", "enabled", "count", "spawn_offset", "resource_slot", "image_slot", "node_slot", "static_resource_default_first", "static_image", "inherited_label", "inherited_count"]) {
 				assert(propertyNames.includes(name), `exported property missing from property list: ${name}`);
 			}
-			const labelProperty = propertyList.find(property => String(property.name) === "label");
-			if (!labelProperty) {
-				throw new Error("label export metadata missing from property list");
-			}
+			const labelProperty = getExportProperty("label");
 			nodeAssert.equal(Number(labelProperty.hint), 20);
 			nodeAssert.equal(String(labelProperty.hint_string), "runtime label");
-			const inheritedLabelProperty = propertyList.find(property => String(property.name) === "inherited_label");
-			if (!inheritedLabelProperty) {
-				throw new Error("inherited_label export metadata missing from property list");
-			}
+			const inheritedLabelProperty = getExportProperty("inherited_label");
 			nodeAssert.equal(Number(inheritedLabelProperty.hint), 20);
 			nodeAssert.equal(String(inheritedLabelProperty.hint_string), "base label");
+			assertObjectExportMetadata("resource_slot", PROPERTY_HINT_RESOURCE_TYPE, "Resource");
+			assertObjectExportMetadata("image_slot", PROPERTY_HINT_RESOURCE_TYPE, "Image");
+			assertObjectExportMetadata("static_resource_default_first", PROPERTY_HINT_RESOURCE_TYPE, "Resource");
+			assertObjectExportMetadata("static_image", PROPERTY_HINT_RESOURCE_TYPE, "Image");
+			assertObjectExportMetadata("node_slot", PROPERTY_HINT_NODE_TYPE, "Node");
+
+			const exportedResource = new Resource();
+			exportedResource.resource_name = "PersistentRuntimeResource";
+			this.resource_slot = exportedResource;
+			const packedScene = new PackedScene();
+			nodeAssert.equal(packedScene.pack(this), GODOT_OK);
+			const packedResource = findPackedScenePropertyValue(packedScene, "resource_slot") as unknown;
+			assert(packedResource instanceof Resource, "packed scene did not save Resource export state");
+			nodeAssert.equal((packedResource as Resource).resource_name, "PersistentRuntimeResource");
+			const savePath = "user://gode_export_state_test.tscn";
+			nodeAssert.equal(ResourceSaver.save(packedScene, savePath), GODOT_OK);
+			const loadedScene = ResourceLoader.load(savePath) as PackedScene;
+			assert(loadedScene instanceof PackedScene, "saved packed scene did not reload");
+			const loadedResource = findPackedScenePropertyValue(loadedScene, "resource_slot") as unknown;
+			assert(loadedResource instanceof Resource, "reloaded scene did not preserve Resource export state");
+			nodeAssert.equal((loadedResource as Resource).resource_name, "PersistentRuntimeResource");
 
 			assert(GD.is_instance_valid(this), "GD.is_instance_valid did not accept a live Godot object");
 			assert(!GD.is_instance_valid(null), "GD.is_instance_valid should reject null");
