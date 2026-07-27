@@ -1,7 +1,7 @@
 import { Node } from "godot";
 
 class RuntimeIntegrationBase extends Node {
-	@Export({ "hint": 20, "hint_string": "base label" } as const)
+	@Export({ "hint": 20, "hintString": "base label" } as const)
 	inherited_label = "base-runtime";
 
 	@Export()
