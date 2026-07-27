@@ -126,9 +126,11 @@ static GDExtensionObjectPtr script_instance_get_owner(GDExtensionScriptInstanceD
 }
 
 static void script_instance_get_property_state(GDExtensionScriptInstanceDataPtr p_instance, GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) {
-	(void)p_instance;
-	(void)p_add_func;
-	(void)p_userdata;
+	ScriptInstance *instance = cast_instance(p_instance);
+	if (!instance) {
+		return;
+	}
+	instance->get_property_state(p_add_func, p_userdata);
 }
 
 static const GDExtensionMethodInfo *script_instance_get_method_list(GDExtensionScriptInstanceDataPtr p_instance, uint32_t *r_count) {
