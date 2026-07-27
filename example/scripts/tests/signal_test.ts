@@ -1,9 +1,32 @@
-import { Node, type VariantArgument, Vector3 } from "godot";
+import { GDDictionary, Node, type VariantArgument, Vector3 } from "godot";
 
 function assert(condition: boolean, message: string): void {
 	if (!condition) {
 		throw new Error(message);
 	}
+}
+
+function dictionaryValue(container: VariantArgument, key: string): VariantArgument {
+	if (container instanceof GDDictionary) {
+		for (const candidate of container.keys()) {
+			if (String(candidate) === key) {
+				return container.get(candidate);
+			}
+		}
+		return undefined;
+	}
+	if (container instanceof Map) {
+		for (const [candidate, value] of container) {
+			if (String(candidate) === key) {
+				return value;
+			}
+		}
+		return undefined;
+	}
+	if (container !== null && typeof container === "object") {
+		return (container as Record<string, VariantArgument>)[key];
+	}
+	return undefined;
 }
 
 export default class SignalTest extends Node {
@@ -16,9 +39,13 @@ export default class SignalTest extends Node {
 	} as const;
 
 	static exports = {
-		"threshold": { "type": "int", "hint": 1, "hint_string": "0,10,1", "default": 3 as const },
+		"threshold": { "type": "int", "hint": 1, "hintString": "0,10,1", "default": 3 as const },
 		"spawn_offset": { "type": "Vector3" },
 	} satisfies ExportMap;
+
+	static rpcConfig = {
+		run_test: { mode: "authority", transferMode: "reliable", callLocal: true, channel: 0 },
+	} satisfies RpcConfig;
 
 	threshold = 3 as const;
 	spawn_offset = new Vector3(1, 2, 3) as Vector3;
@@ -40,17 +67,25 @@ export default class SignalTest extends Node {
 			assert(Number(thresholdProperty.hint) === 1, "static exports hint was not preserved");
 			assert(String(thresholdProperty.hint_string) === "0,10,1", "static exports hint string was not preserved");
 
-				const received: VariantArgument[] = [];
-				this.connect("completed", (payload: VariantArgument) => {
-					received.push(payload);
-				});
+			const script = this.get_script() as { get_rpc_config(): VariantArgument };
+			const rpcMetadata = dictionaryValue(script.get_rpc_config(), "run_test");
+			assert(rpcMetadata !== undefined, "rpcConfig metadata was not registered");
+			assert(Number(dictionaryValue(rpcMetadata, "rpc_mode")) === 2, "rpcConfig mode was not preserved");
+			assert(Number(dictionaryValue(rpcMetadata, "transfer_mode")) === 2, "rpcConfig transfer mode was not preserved");
+			assert(Boolean(dictionaryValue(rpcMetadata, "call_local")) === true, "rpcConfig callLocal was not preserved");
+			assert(Number(dictionaryValue(rpcMetadata, "channel")) === 0, "rpcConfig channel was not preserved");
+
+			const received: VariantArgument[] = [];
+			this.connect("completed", (payload: VariantArgument) => {
+				received.push(payload);
+			});
 
 			setTimeout(() => {
 				this.emit_signal("completed", { ok: true, count: received.length + 1 });
 			}, 0);
 
-				const payload = await this.to_signal("completed", { timeoutMs: 1000 }) as { ok?: boolean };
-				assert(payload.ok === true, "signal payload did not cross the Godot/TypeScript boundary");
+			const payload = await this.to_signal("completed", { timeoutMs: 1000 }) as { ok?: boolean };
+			assert(payload.ok === true, "signal payload did not cross the Godot/TypeScript boundary");
 			assert(received.length === 1, "signal callback did not run exactly once");
 
 			console.log("[GodeTest] signal_test passed");
