@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 cmake_policy(SET CMP0091 NEW)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "Select the MSVC runtime library." FORCE)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "Select the MSVC runtime library." FORCE)
 
 project(gode VERSION 2.3.0 LANGUAGES C CXX)
 
@@ -18,12 +18,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(GODE_RUN_CODEGEN "Run the Python binding generator at configure time" ON)
-
-if(MSVC)
-	# The bundled Windows libnode.lib is a release static library. MSVC Debug
-	# builds default to _ITERATOR_DEBUG_LEVEL=2, which cannot link with it.
-	add_compile_definitions("$<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=0>")
-endif()
 
 set(GODOT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/godot-cpp" CACHE PATH "Path to godot-cpp")
 set(NODE_ADDON_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/node-addon-api" CACHE PATH "Path to node-addon-api")
