@@ -560,6 +560,9 @@ class DtsGenerator(CodeGenerator):
         lines.append('    default?: import("godot").VariantArgument;')
         lines.append('  }')
         lines.append('  type ExportMap = Record<string, ExportEntry>;')
+        lines.append('')
+        lines.append('type int = number;')
+        lines.append('type float = number;')
 
         lines.append('}')
         lines.append('')
