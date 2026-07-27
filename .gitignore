@@ -49,7 +49,6 @@ example/addons/gode/binary/*
 !example/addons/gode/binary/gode.gdextension
 !example/addons/gode/binary/gode.gdextension.uid
 
-# idea
-.idea
-cmake-build-debug-visual-studio
-cmake-build-release-visual-studio
+# IDE and local CMake build directories
+.idea/
+*-build-*
