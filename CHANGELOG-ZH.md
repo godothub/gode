@@ -1,3 +1,11 @@
+## 2.3.2
+
+- 将 GitHub Actions 的 artifact 下载步骤更新到 `actions/download-artifact@v8`，消除 release package 和 packaged-plugin smoke test 下载 artifact 时的 Node.js 20 弃用警告。
+- 修复 TypeScript 导出的 Object/Resource/Node 属性：script instance state 保存现在会返回已存储的导出值，Resource 和 Node 的 Inspector hint 会从类型化导出中推断，`static exports` 的默认值也会在 descriptor 类型确定后再解析，不再受字段顺序影响。
+- Breaking：简化 TypeScript metadata 输入键，只保留 camelCase。导出 metadata 使用 `hintString`，RPC metadata 使用 `static rpcConfig` 以及 `transferMode`、`callLocal`；旧的 snake_case 输入别名已移除。
+- 改进 generated binding 的构建体验：generator 输入未变化时会跳过 configure-time codegen，通过仅针对 generated C++ 的 unity build 批量编译源码，并在可用时自动使用 `sccache` 或 `ccache`。
+- 修复 libnode 静态链接：各平台构建会强制完整加载 libnode archive，不再依赖链接器默认的按需 archive member 选择。
+
 ## 2.3.1
 
 - 增加 Godot 数字全局类型的 TypeScript 全局类型别名：`int` 现在解析为 `number | bigint`，与 64 位整数转换行为一致，`float` 解析为 `number`。
