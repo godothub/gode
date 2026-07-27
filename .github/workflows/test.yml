@@ -93,7 +93,7 @@ jobs:
 
       - name: Download packaged plugin
         if: ${{ inputs.plugin_artifact_name != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.plugin_artifact_name }}
           path: ${{ runner.temp }}/gode-plugin
