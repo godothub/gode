@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "Select the MSVC runtime library." FORCE)
 
-project(gode VERSION 2.3.0 LANGUAGES C CXX)
+project(gode VERSION 2.3.1 LANGUAGES C CXX)
 
 if(NOT CMAKE_CONFIGURATION_TYPES)
 	if(NOT CMAKE_BUILD_TYPE)
