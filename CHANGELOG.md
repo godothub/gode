@@ -1,3 +1,8 @@
+## 2.3.1
+
+- Added ambient TypeScript aliases for Godot numeric global types: `int` now resolves to `number | bigint` to match 64-bit integer conversion behavior, and `float` resolves to `number`.
+- Hardened the release workflow so manually dispatched releases reject `v`-prefixed tags and publish plain SemVer tag and release names consistently.
+
 ## 2.3.0
 
 - Improved the bundled TypeScript compiler to honor `tsconfig.json` `include`, `exclude`, `baseUrl`, `paths`, and parsed root files, use TypeScript `matchFiles` over the `res://` virtual path space, emit only sources that are actually part of the program, enable TSX `jsx: react` by default, report unreadable project source files instead of silently omitting them, reject module specifiers that normalize above the `res://` root, and rewrite in-project path-alias imports/exports through an emit transformer to runtime-resolvable relative `.js` specifiers.
