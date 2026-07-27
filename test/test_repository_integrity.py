@@ -215,6 +215,50 @@ class RepositoryIntegrityTests(unittest.TestCase):
 
 		self.assertEqual([], missing)
 
+	def test_cmake_codegen_and_generated_binding_builds_are_incremental(self):
+		cmake_text = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+
+		for token in (
+			'option(GODE_USE_COMPILER_CACHE',
+			'option(GODE_UNITY_GENERATED_BINDINGS',
+			'set(GODE_UNITY_GENERATED_BATCH_SIZE "8" CACHE STRING',
+			'if(NOT GODE_UNITY_GENERATED_BATCH_SIZE MATCHES "^[1-9][0-9]*$")',
+			"GODE_UNITY_GENERATED_BATCH_SIZE must be a positive integer.",
+			"find_program(GODE_COMPILER_CACHE_PROGRAM sccache)",
+			"find_program(GODE_COMPILER_CACHE_PROGRAM ccache)",
+			"CMAKE_C_COMPILER_LAUNCHER",
+				"CMAKE_CXX_COMPILER_LAUNCHER",
+				'if(WIN32)',
+				'set(GODE_LIBNODE_LINK_ITEMS "/WHOLEARCHIVE:${GODE_LIBNODE_FILE}")',
+				'elseif(APPLE)',
+				'set(GODE_LIBNODE_LINK_ITEMS "-Wl,-force_load,${GODE_LIBNODE_FILE}")',
+				'else()',
+				'set(GODE_LIBNODE_LINK_ITEMS "-Wl,--whole-archive" "${GODE_LIBNODE_FILE}" "-Wl,--no-whole-archive")',
+				'set(GODE_EXTENSION_API_JSON "" CACHE FILEPATH',
+			"file(GLOB_RECURSE GODE_CODEGEN_PYTHON_INPUTS CONFIGURE_DEPENDS",
+			"file(GLOB GODE_CODEGEN_TEMPLATE_INPUTS CONFIGURE_DEPENDS",
+			"generator/requirements.txt",
+			"file(SHA256",
+			"string(SHA256 _GODE_CODEGEN_INPUT_HASH",
+			"CMakeFiles/gode-codegen",
+			"input.sha256",
+			"Gode code generation inputs unchanged; skipping generator.",
+			"Running Gode code generation",
+			'"GODOT_EXTENSION_API_JSON=${_GODE_EXTENSION_API_JSON}"',
+			"file(GLOB_RECURSE GODE_MANUAL_SOURCES CONFIGURE_DEPENDS",
+			"file(GLOB_RECURSE GODE_GENERATED_SOURCES CONFIGURE_DEPENDS",
+			"list(REMOVE_ITEM GODE_MANUAL_SOURCES ${GODE_GENERATED_SOURCES})",
+			"set(GODE_SOURCES ${GODE_MANUAL_SOURCES} ${GODE_GENERATED_SOURCES})",
+			"UNITY_BUILD ON",
+			'UNITY_BUILD_BATCH_SIZE "${GODE_UNITY_GENERATED_BATCH_SIZE}"',
+			"SKIP_UNITY_BUILD_INCLUSION ON",
+			"Generated binding unity build enabled with batch size",
+		):
+			self.assertIn(token, cmake_text)
+
+		self.assertNotIn("set(ENV{GODOT_CPP_DIR}", cmake_text)
+		self.assertNotIn("\tgode_libnode\n", cmake_text)
+
 	def test_node_runtime_helpers_are_split_from_runtime_lifecycle(self):
 		expected_files = [
 			ROOT / "include/runtime/node_bootstrap_scripts.h",
@@ -708,10 +752,24 @@ class RepositoryIntegrityTests(unittest.TestCase):
 			"parent_ts->get_property_list_ordered()",
 			"property_list.push_back(property);",
 			"upsert_ordered_property",
-			"parse_static_exports(class_node, source, properties, property_list, property_defaults);",
+			"parse_static_exports(class_node, source, get_path(), root_node, child_count, properties, property_list, property_defaults);",
 			'strcmp(node_type, "member_expression")',
 			'strcmp(node_type, "generic_type")',
 			"class_name_tail",
+			"ObjectExportKind",
+			"canonical_type_name",
+			"godot_class_name_from_type",
+			"classify_engine_object_class",
+			"resolve_typescript_object_kind",
+			"configure_property_type",
+			"finalize_explicit_object_hint",
+			"PROPERTY_HINT_RESOURCE_TYPE",
+			"PROPERTY_HINT_NODE_TYPE",
+			'class_db->is_parent_class(class_name, StringName("Resource"))',
+			'class_db->is_parent_class(class_name, StringName("Node"))',
+			"TSNode default_node = {};",
+			"if (!type_str.empty())",
+			"parse_default_value(default_node, source, pi.type, default_value)",
 			'lower.ends_with(".jsx")',
 			'stem + String(".tsx")',
 			'stem + String(".ts")',
@@ -757,6 +815,18 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		):
 			self.assertIn(token, source)
 		self.assertNotIn('path_join(String(import_path.c_str()) + ".ts")', source)
+		self.assertIn('name == "rpcConfig"', source)
+		self.assertIn('key == "transferMode"', source)
+		self.assertIn('key == "callLocal"', source)
+		self.assertIn('key_str == "hintString"', source)
+		self.assertIn('field_key == "hintString"', source)
+		self.assertNotIn('name == "rpc_config"', source)
+		self.assertNotIn('name == "rpcs"', source)
+		self.assertNotIn('key == "transfer_mode"', source)
+		self.assertNotIn('key == "call_local"', source)
+		self.assertNotIn('key == "rpc_mode"', source)
+		self.assertNotIn('key_str == "hint_string"', source)
+		self.assertNotIn('field_key == "hint_string"', source)
 		self.assertNotIn("std::stoi(", source)
 		self.assertNotIn("std::atoi", source)
 		self.assertEqual(1, source.count("std::stod("))
@@ -771,6 +841,8 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertIn('"label": { "type": "String", "hint": 20, "hintString": "runtime label" }', runtime_test)
 		self.assertIn('"enabled": { "type": "bool", "default": true as const }', runtime_test)
 		self.assertIn('"count": { "type": "int", "default": 7 as const }', runtime_test)
+		self.assertIn('"static_resource_default_first": { "default": null, "type": "Resource" }', runtime_test)
+		self.assertIn('"static_image": { "type": "Image", "default": null }', runtime_test)
 		self.assertIn("__gode_load_esm", runtime_test)
 		self.assertIn("__gode_compile_esm", runtime_test)
 		self.assertIn("runtime_pending_retry_fixture.js", runtime_test)
@@ -792,12 +864,24 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertIn('!scanDependencyPaths.includes("res://scripts/tests/signal_test.ts")', runtime_test)
 		self.assertIn("nodeAssert.equal(Number(labelProperty.hint), 20);", runtime_test)
 		self.assertIn('nodeAssert.equal(String(labelProperty.hint_string), "runtime label");', runtime_test)
+		self.assertIn("resource_slot: Resource | null = null;", runtime_test)
+		self.assertIn("image_slot: Image | null = null;", runtime_test)
+		self.assertIn("node_slot: Node | null = null;", runtime_test)
+		self.assertIn("const VARIANT_TYPE_OBJECT = 24;", runtime_test)
+		self.assertIn("const PROPERTY_HINT_RESOURCE_TYPE = 17;", runtime_test)
+		self.assertIn("const PROPERTY_HINT_NODE_TYPE = 34;", runtime_test)
+		self.assertIn('assertObjectExportMetadata("resource_slot", PROPERTY_HINT_RESOURCE_TYPE, "Resource");', runtime_test)
+		self.assertIn('assertObjectExportMetadata("image_slot", PROPERTY_HINT_RESOURCE_TYPE, "Image");', runtime_test)
+		self.assertIn('assertObjectExportMetadata("node_slot", PROPERTY_HINT_NODE_TYPE, "Node");', runtime_test)
+		self.assertIn("packedScene.pack(this)", runtime_test)
+		self.assertIn("ResourceSaver.save(packedScene, savePath)", runtime_test)
+		self.assertIn('findPackedScenePropertyValue(loadedScene, "resource_slot")', runtime_test)
 		self.assertIn('label = "runtime" as string;', runtime_test)
 		self.assertIn("enabled = true as boolean;", runtime_test)
 		self.assertIn("count = 7 as number;", runtime_test)
 		self.assertIn("spawn_offset = new Vector3(4, 5, 6) as Vector3;", runtime_test)
 		self.assertIn("class RuntimeIntegrationBase extends Node", runtime_base)
-		self.assertIn('@Export({ "hint": 20, "hint_string": "base label" } as const)', runtime_base)
+		self.assertIn('@Export({ "hint": 20, "hintString": "base label" } as const)', runtime_base)
 		self.assertIn('nodeAssert.equal(String(inheritedLabelProperty.hint_string), "base label");', runtime_test)
 		self.assertIn("export { RuntimeIntegrationBase };", runtime_base)
 		self.assertIn("export default RuntimeIntegrationBase;", runtime_base)
@@ -809,12 +893,42 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertIn('import("./signal_test" + suffix)', dependency_scan_test)
 
 		signal_test = (ROOT / "example/scripts/tests/signal_test.ts").read_text(encoding="utf-8")
+		self.assertIn('import { GDDictionary, Node, type VariantArgument, Vector3 } from "godot";', signal_test)
+		self.assertIn("function dictionaryValue(container: VariantArgument, key: string): VariantArgument", signal_test)
 		self.assertIn("static signals = {", signal_test)
 		self.assertIn("} as const;", signal_test)
 		self.assertIn("} satisfies ExportMap;", signal_test)
-		self.assertIn('"threshold": { "type": "int", "hint": 1, "hint_string": "0,10,1", "default": 3 as const }', signal_test)
+		self.assertIn('"threshold": { "type": "int", "hint": 1, "hintString": "0,10,1", "default": 3 as const }', signal_test)
+		self.assertIn("static rpcConfig = {", signal_test)
+		self.assertIn('run_test: { mode: "authority", transferMode: "reliable", callLocal: true, channel: 0 }', signal_test)
+		self.assertIn("} satisfies RpcConfig;", signal_test)
+		self.assertIn("const script = this.get_script() as { get_rpc_config(): VariantArgument };", signal_test)
+		self.assertIn('const rpcMetadata = dictionaryValue(script.get_rpc_config(), "run_test");', signal_test)
+		self.assertIn('dictionaryValue(rpcMetadata, "rpc_mode")', signal_test)
+		self.assertIn('dictionaryValue(rpcMetadata, "transfer_mode")', signal_test)
+		self.assertIn('dictionaryValue(rpcMetadata, "call_local")', signal_test)
 		self.assertIn('assert(String(thresholdProperty.hint_string) === "0,10,1"', signal_test)
 		self.assertIn("threshold = 3 as const;", signal_test)
+
+	def test_typescript_exported_property_state_is_not_a_noop(self):
+		script_instance_header = (ROOT / "include/script/script_instance.h").read_text(encoding="utf-8")
+		script_instance = (ROOT / "src/script/script_instance.cpp").read_text(encoding="utf-8")
+		script_instance_info = (ROOT / "src/script/script_instance_info.cpp").read_text(encoding="utf-8")
+
+		self.assertIn("void get_property_state(GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) const;", script_instance_header)
+		self.assertIn("void ScriptInstance::get_property_state(GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) const", script_instance)
+		self.assertIn("if (!script->compile())", script_instance)
+		self.assertIn("PROPERTY_USAGE_STORAGE", script_instance)
+		self.assertIn("script->get_property_list_ordered()", script_instance)
+		self.assertIn("script->properties.has(property.name)", script_instance)
+		self.assertIn("p_add_func(", script_instance)
+		state_callback_start = script_instance_info.index("static void script_instance_get_property_state")
+		state_callback_body = script_instance_info[state_callback_start:state_callback_start + 500]
+		self.assertIn("ScriptInstance *instance = cast_instance(p_instance);", state_callback_body)
+		self.assertIn("instance->get_property_state(p_add_func, p_userdata);", state_callback_body)
+		self.assertNotIn("(void)p_instance;", state_callback_body)
+		self.assertNotIn("(void)p_add_func;", state_callback_body)
+		self.assertNotIn("(void)p_userdata;", state_callback_body)
 
 	def test_legacy_javascript_script_language_surface_is_removed(self):
 		for path in (
@@ -2275,7 +2389,13 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertNotIn("  const Engine: GodotModule.Engine;", globals_dts)
 		self.assertIn("  function Export(hint: number, hintString?: string): any;", globals_dts)
 		self.assertIn("    hintString?: string;", globals_dts)
-		self.assertIn("    hint_string?: string;", globals_dts)
+		self.assertNotIn("hint_string?:", globals_dts)
+		self.assertIn('  type RpcMode = "authority" | "any_peer" | "disabled" | number;', globals_dts)
+		self.assertIn('  type RpcTransferMode = "reliable" | "unreliable" | "unreliable_ordered" | number;', globals_dts)
+		self.assertIn("    transferMode?: RpcTransferMode;", globals_dts)
+		self.assertIn("    callLocal?: boolean;", globals_dts)
+		self.assertNotIn("transfer_mode?:", globals_dts)
+		self.assertNotIn("call_local?:", globals_dts)
 		export_options_body = globals_dts[
 			globals_dts.index("  interface ExportOptions {") :
 			globals_dts.index("  function Export(hint: number, hintString?: string): any;")
