@@ -53,6 +53,7 @@ public:
 
 	bool property_can_revert(const godot::StringName &p_name) const;
 	bool property_get_revert(const godot::StringName &p_name, godot::Variant &r_ret) const;
+	void get_property_state(GDExtensionScriptInstancePropertyStateAdd p_add_func, void *p_userdata) const;
 
 	void reload(bool p_keep_state);
 
