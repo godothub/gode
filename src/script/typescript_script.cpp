@@ -1734,7 +1734,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, co
 								std::string key_str = strip_quotes(source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key)));
 								if (key_str == "hint") {
 									parse_property_hint_value(val, source, export_hint);
-								} else if (key_str == "hintString") {
+								} else if (key_str == "hint_string") {
 									parse_metadata_string_value(val, source, export_hint_string);
 								}
 						}
@@ -1988,7 +1988,7 @@ static void parse_exports_object(TSNode obj_node, const std::string &source, con
 				if (parse_property_hint_value(fval, source, parsed_hint)) {
 					pi.hint = parsed_hint;
 				}
-			} else if (field_key == "hintString") {
+			} else if (field_key == "hint_string") {
 				parse_metadata_string_value(fval, source, pi.hint_string);
 			} else if (field_key == "default") {
 				default_node = fval;
