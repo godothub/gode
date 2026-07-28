@@ -225,11 +225,14 @@ if(NOT EXISTS "${GODE_LIBNODE_FILE}")
 	message(FATAL_ERROR "libnode binary was not found: ${GODE_LIBNODE_FILE}")
 endif()
 if(WIN32)
-	set(GODE_LIBNODE_LINK_ITEMS "/WHOLEARCHIVE:${GODE_LIBNODE_FILE}")
+	set(GODE_LIBNODE_LINK_ITEMS)
+	set(GODE_LIBNODE_LINK_OPTIONS "/WHOLEARCHIVE:${GODE_LIBNODE_FILE}")
 elseif(APPLE)
 	set(GODE_LIBNODE_LINK_ITEMS "-Wl,-force_load,${GODE_LIBNODE_FILE}")
+	set(GODE_LIBNODE_LINK_OPTIONS)
 else()
 	set(GODE_LIBNODE_LINK_ITEMS "-Wl,--whole-archive" "${GODE_LIBNODE_FILE}" "-Wl,--no-whole-archive")
+	set(GODE_LIBNODE_LINK_OPTIONS)
 endif()
 set_target_properties(gode_libnode PROPERTIES
 	IMPORTED_LOCATION "${GODE_LIBNODE_FILE}"
@@ -293,6 +296,8 @@ target_link_libraries(gode PRIVATE
 	gode_tree_sitter_typescript
 	${GODE_LIBNODE_SYSTEM_LIBS}
 )
+target_link_options(gode PRIVATE ${GODE_LIBNODE_LINK_OPTIONS})
+set_property(TARGET gode APPEND PROPERTY LINK_DEPENDS "${GODE_LIBNODE_FILE}")
 
 if(MSVC)
 	target_compile_options(gode PRIVATE /bigobj /utf-8 /EHsc /Zc:__cplusplus)
