@@ -1117,6 +1117,22 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertIn("tsc/package.json", package_script)
 		self.assertIn("tsc/lib/typescript.js", package_script)
 
+	def test_prepare_typescript_scripts_cover_shell_and_powershell(self):
+		prepare_sh = (ROOT / ".github/shell/prepare-typescript.sh").read_text(encoding="utf-8")
+		prepare_ps1 = (ROOT / ".github/shell/prepare-typescript.ps1").read_text(encoding="utf-8")
+		build_doc = (ROOT / "BUILD-ZH.md").read_text(encoding="utf-8")
+
+		for token in (
+			"6.0.3",
+			"https://github.com/microsoft/TypeScript/releases/download/v6.0.3/typescript-6.0.3.tgz",
+			"33cd0ee1beaa8c9e9d15a9da836c62ddea4c34a42d7c2d349dbc80d94165d22a",
+			"lib/typescript.js",
+		):
+			self.assertIn(token, prepare_sh)
+			self.assertIn(token, prepare_ps1)
+		self.assertIn("./.github/shell/prepare-typescript.sh", build_doc)
+		self.assertIn("./.github/shell/prepare-typescript.ps1", build_doc)
+
 	def test_release_workflow_uses_packaged_smoke_test_and_changelog_notes(self):
 		release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
