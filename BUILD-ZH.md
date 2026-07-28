@@ -29,6 +29,18 @@ libnode/
   android/arm64/libnode.a
 ```
 
+- 已准备内置 TypeScript 编译器。该步骤会生成 `example/addons/gode/tsc/lib/typescript.js`；如果缺少这个文件，Godot 中会报 `The packaged TypeScript compiler is missing`：
+
+```bash
+./.github/shell/prepare-typescript.sh
+```
+
+Windows PowerShell 中可运行同目录下的 PowerShell 脚本：
+
+```powershell
+./.github/shell/prepare-typescript.ps1
+```
+
 ## 最短构建命令
 
 Windows：
@@ -44,6 +56,8 @@ Windows：
 ```
 
 这些命令默认构建 `Debug`，默认启用增量构建，默认自动选择可用的 CMake generator，并将产物输出到 `example/addons/gode/binary/<platform>/<arch>/`。
+
+注意：`shell/build-*` 构建脚本只负责生成 native GDExtension 二进制，不会自动下载 TypeScript 编译器。首次打开 Godot 示例项目前，或清理过 `example/addons/gode/tsc/` 后，需要先运行 `./.github/shell/prepare-typescript.sh` 或 `./.github/shell/prepare-typescript.ps1`。正式打包脚本 `.github/shell/package-plugin.sh` 会在打包 staging 目录中自动准备 TypeScript 编译器。
 
 ## 常用示例
 
