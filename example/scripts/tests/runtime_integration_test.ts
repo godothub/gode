@@ -63,12 +63,16 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 	@Export()
 	node_slot: Node | null = null;
 
+	@Export()
+	editor_array: VariantArgument[] = ["default"];
+
 	run_test(): void {
 		void this.run();
 	}
 
 	async run(): Promise<void> {
 		try {
+			nodeAssert.deepEqual(this.editor_array, [11, "inspector", true]);
 			nodeAssert.equal(moduleMarker, "esm-runtime-helper");
 			nodeAssert.equal(path.posix.basename("res://scripts/tests/runtime_integration_test.ts"), "runtime_integration_test.ts");
 

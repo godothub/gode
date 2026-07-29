@@ -311,6 +311,7 @@ bool ScriptInstance::set(const StringName &p_name, const Variant &p_value) {
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
 	std::string property_name = String(p_name).utf8().get_data();
 	if (!script->properties.has(property_name.c_str())) {
 		return false;
@@ -386,6 +387,7 @@ bool ScriptInstance::get(const StringName &p_name, Variant &r_value) const {
 	v8::Locker locker(NodeRuntime::isolate);
 	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
 	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
 	std::string prop_name = String(p_name).utf8().get_data();
 	if (!script->properties.has(prop_name.c_str())) {
 		return false;
