@@ -449,9 +449,7 @@ static bool parse_integer_literal(const std::string &text, int64_t &r_value) {
 		return false;
 	}
 
-	const uint64_t limit = negative ?
-			static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL :
-			static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+	const uint64_t limit = negative ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL : static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
 	uint64_t value = 0;
 	for (size_t i = offset; i < normalized.size(); i++) {
 		const int digit = numeric_digit_value(normalized[i]);
@@ -591,7 +589,48 @@ static std::string canonical_type_name(const std::string &type_str) {
 	if (type_name.size() > 2 && type_name.compare(type_name.size() - 2, 2, "[]") == 0) {
 		return "Array";
 	}
-	return string_to_utf8(class_name_tail(String(type_name.c_str())));
+	const std::string class_name = string_to_utf8(class_name_tail(String(type_name.c_str())));
+	if (class_name == "ReadonlyArray") {
+		return "Array";
+	}
+	return class_name;
+}
+
+// Returns the element type of T[] and Array<T>. An untyped Array deliberately
+// returns an empty string so the Inspector retains its generic Variant element.
+static std::string array_element_type_text(const std::string &type_str) {
+	const std::string type_name = unwrap_nullable_type_text(type_str);
+	if (type_name.size() > 2 && type_name.compare(type_name.size() - 2, 2, "[]") == 0) {
+		return trim_type_text(type_name.substr(0, type_name.size() - 2));
+	}
+
+	const size_t generic_start = type_name.find('<');
+	if (generic_start == std::string::npos || type_name.back() != '>') {
+		return std::string();
+	}
+	const std::string container_name = string_to_utf8(class_name_tail(String(type_name.substr(0, generic_start).c_str())));
+	if (container_name != "Array" && container_name != "ReadonlyArray") {
+		return std::string();
+	}
+
+	int angle_depth = 0;
+	for (size_t i = generic_start + 1; i + 1 < type_name.size(); i++) {
+		const char c = type_name[i];
+		if (c == '<') {
+			angle_depth++;
+		} else if (c == '>') {
+			if (angle_depth == 0) {
+				return std::string();
+			}
+			angle_depth--;
+		} else if (c == ',' && angle_depth == 0) {
+			return std::string();
+		}
+	}
+	if (angle_depth != 0) {
+		return std::string();
+	}
+	return trim_type_text(type_name.substr(generic_start + 1, type_name.size() - generic_start - 2));
 }
 
 static StringName godot_class_name_from_type(const std::string &type_str) {
@@ -726,6 +765,26 @@ static void configure_property_type(
 		TSNode root_node,
 		uint32_t child_count);
 
+// PROPERTY_HINT_ARRAY_TYPE encodes the element PropertyInfo as
+// "VariantType/PropertyHint:hint_string". Passing only a class name makes the
+// Inspector treat the array as untyped, so Resource-derived elements are added
+// as null instead of opening a resource picker.
+static String array_element_hint_string(const PropertyInfo &element_property) {
+	String encoded = String::num_int64(static_cast<int64_t>(element_property.type));
+	const uint32_t element_hint = element_property.type == Variant::ARRAY && element_property.hint == PROPERTY_HINT_ARRAY_TYPE ? PROPERTY_HINT_NONE : element_property.hint;
+	if (element_hint != PROPERTY_HINT_NONE) {
+		encoded += "/";
+		encoded += String::num_int64(static_cast<int64_t>(element_hint));
+	}
+	encoded += ":";
+	if (!element_property.hint_string.is_empty()) {
+		encoded += element_property.hint_string;
+	} else if (!element_property.class_name.is_empty()) {
+		encoded += String(element_property.class_name);
+	}
+	return encoded;
+}
+
 static StringName qualifier_from_type_text(const std::string &type_str) {
 	String expression(unwrap_nullable_type_text(type_str).c_str());
 	expression = expression.strip_edges();
@@ -838,6 +897,20 @@ static void configure_property_type(
 		TSNode root_node,
 		uint32_t child_count) {
 	property.type = parse_type_string(type_str);
+	if (property.type == Variant::ARRAY) {
+		const std::string element_type_str = array_element_type_text(type_str);
+		if (property.hint == PROPERTY_HINT_NONE && !element_type_str.empty()) {
+			PropertyInfo element_property;
+			element_property.type = Variant::NIL;
+			element_property.hint = PROPERTY_HINT_NONE;
+			configure_property_type(element_property, element_type_str, file_path, source, root_node, child_count);
+			if (element_property.type != Variant::NIL) {
+				property.hint = PROPERTY_HINT_ARRAY_TYPE;
+				property.hint_string = array_element_hint_string(element_property);
+			}
+		}
+		return;
+	}
 	const StringName type_class_name = godot_class_name_from_type(type_str);
 	if (type_class_name.is_empty() || type_class_name == StringName("Array")) {
 		return;
@@ -1731,12 +1804,12 @@ static void parse_class_members(TSNode class_node, const std::string &source, co
 							if (ts_node_is_null(val)) {
 								continue;
 							}
-								std::string key_str = strip_quotes(source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key)));
-								if (key_str == "hint") {
-									parse_property_hint_value(val, source, export_hint);
-								} else if (key_str == "hint_string") {
-									parse_metadata_string_value(val, source, export_hint_string);
-								}
+							std::string key_str = strip_quotes(source.substr(ts_node_start_byte(key), ts_node_end_byte(key) - ts_node_start_byte(key)));
+							if (key_str == "hint") {
+								parse_property_hint_value(val, source, export_hint);
+							} else if (key_str == "hint_string") {
+								parse_metadata_string_value(val, source, export_hint_string);
+							}
 						}
 					} else {
 						// @Export(hint) or @Export(hint, "hintString").

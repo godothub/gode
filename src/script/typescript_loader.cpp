@@ -719,13 +719,13 @@ bool TypeScriptLoader::_recognize_path(const String &p_path, const StringName &p
 }
 
 bool TypeScriptLoader::_handles_type(const StringName &p_type) const {
-	return p_type == StringName("Script");
+	return p_type == StringName("Script") || p_type == TypeScriptScript::get_class_static();
 }
 
 String TypeScriptLoader::_get_resource_type(const String &p_path) const {
 	String ext = p_path.get_extension().to_lower();
 	if (ext == String("ts") || ext == String("tsx")) {
-		return String("Script");
+		return String(TypeScriptScript::get_class_static());
 	}
 	return String();
 }

@@ -45,6 +45,19 @@ func _run_next() -> void:
 		if current_test.get("editor_array") != [11, "inspector", true]:
 			_fail("RuntimeIntegrationTest export Array did not round-trip through ScriptInstance")
 			return
+		current_test.set("editor_number_array", [0])
+		if current_test.get("editor_number_array") != [0]:
+			_fail("RuntimeIntegrationTest typed export Array did not round-trip through ScriptInstance")
+			return
+		var custom_resource := load("res://scripts/tests/runtime_array_resource.tres")
+		if custom_resource == null:
+			_fail("RuntimeIntegrationTest custom Resource fixture did not load")
+			return
+		current_test.set("editor_custom_resource_array", [custom_resource])
+		var custom_resource_array: Array = current_test.get("editor_custom_resource_array")
+		if custom_resource_array.size() != 1 or custom_resource_array[0] != custom_resource:
+			_fail("RuntimeIntegrationTest custom Resource Array did not round-trip through ScriptInstance")
+			return
 
 	current_test.call(RUN_TEST_METHOD)
 

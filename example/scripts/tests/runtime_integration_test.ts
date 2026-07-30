@@ -7,15 +7,21 @@ import v8 from "node:v8";
 import vm from "node:vm";
 import { Color, Engine, GD, GDArray, GDString, GodotObject, Image, ImageTexture, Node, PackedInt32Array, PackedScene, PackedStringArray, PackedVector3Array, Resource, ResourceLoader, ResourceSaver, type VariantArgument, Vector2, Vector2i, Vector3 } from "godot";
 import cjsFixture, { makeCommonPayload } from "./commonjs_fixture.cjs";
+import RuntimeArrayResource from "./runtime_array_resource.js";
 import * as RuntimeBaseModule from "./runtime_base_test.js";
 import { buildRuntimePayload, moduleMarker, waitForEventLoopTurn } from "./runtime_helpers.js";
 
 v8.setFlagsFromString("--expose-gc");
 const forceGarbageCollection = vm.runInNewContext("gc") as () => void;
 const GODOT_OK = 0;
+const VARIANT_TYPE_FLOAT = 3;
+const VARIANT_TYPE_ARRAY = 28;
 const VARIANT_TYPE_OBJECT = 24;
+const PROPERTY_HINT_ARRAY_TYPE = 31;
 const PROPERTY_HINT_RESOURCE_TYPE = 17;
 const PROPERTY_HINT_NODE_TYPE = 34;
+const RUNTIME_ARRAY_RESOURCE_SCRIPT_PATH = "res://scripts/tests/runtime_array_resource.ts";
+const RUNTIME_ARRAY_RESOURCE_FIXTURE_PATH = "res://scripts/tests/runtime_array_resource.tres";
 
 function assert(condition: boolean, message: string): void {
 	if (!condition) {
@@ -66,6 +72,12 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 	@Export()
 	editor_array: VariantArgument[] = ["default"];
 
+	@Export()
+	editor_number_array: number[] = [];
+
+	@Export()
+	editor_custom_resource_array: RuntimeArrayResource[] = [];
+
 	run_test(): void {
 		void this.run();
 	}
@@ -73,8 +85,29 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 	async run(): Promise<void> {
 		try {
 			nodeAssert.deepEqual(this.editor_array, [11, "inspector", true]);
+			nodeAssert.deepEqual(this.editor_number_array, [0]);
+			nodeAssert.equal(this.editor_custom_resource_array.length, 1);
+			nodeAssert.equal(this.editor_custom_resource_array[0].resource_name, "RuntimeArrayFixture");
 			nodeAssert.equal(moduleMarker, "esm-runtime-helper");
 			nodeAssert.equal(path.posix.basename("res://scripts/tests/runtime_integration_test.ts"), "runtime_integration_test.ts");
+			nodeAssert.equal(String(ResourceLoader.get_resource_type(RUNTIME_ARRAY_RESOURCE_SCRIPT_PATH)), "TypeScriptScript");
+
+			const runtimeArrayResourceScript = ResourceLoader.load(RUNTIME_ARRAY_RESOURCE_SCRIPT_PATH) as unknown as {
+				get_global_name(): VariantArgument;
+				get_instance_base_type(): VariantArgument;
+			};
+			assert(runtimeArrayResourceScript !== null, "custom Resource TypeScript script did not load");
+			nodeAssert.equal(String(runtimeArrayResourceScript.get_global_name()), "RuntimeArrayResource");
+			nodeAssert.equal(String(runtimeArrayResourceScript.get_instance_base_type()), "Resource");
+
+			const runtimeArrayResourceFixture = ResourceLoader.load(RUNTIME_ARRAY_RESOURCE_FIXTURE_PATH) as Resource;
+			assert(runtimeArrayResourceFixture instanceof Resource, "custom Resource fixture did not load");
+			nodeAssert.equal(runtimeArrayResourceFixture.resource_name, "RuntimeArrayFixture");
+			const fixtureScript = runtimeArrayResourceFixture.get_script() as unknown as {
+				get_global_name(): VariantArgument;
+			};
+			assert(fixtureScript !== null, "custom Resource fixture lost its TypeScript script");
+			nodeAssert.equal(String(fixtureScript.get_global_name()), "RuntimeArrayResource");
 
 			const esmPayload = buildRuntimePayload("alpha");
 			nodeAssert.deepEqual(esmPayload.values, [1, 2, 3]);
@@ -213,6 +246,14 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 			assertObjectExportMetadata("static_resource_default_first", PROPERTY_HINT_RESOURCE_TYPE, "Resource");
 			assertObjectExportMetadata("static_image", PROPERTY_HINT_RESOURCE_TYPE, "Image");
 			assertObjectExportMetadata("node_slot", PROPERTY_HINT_NODE_TYPE, "Node");
+			const numberArrayProperty = getExportProperty("editor_number_array");
+			nodeAssert.equal(Number(numberArrayProperty.type), VARIANT_TYPE_ARRAY);
+			nodeAssert.equal(Number(numberArrayProperty.hint), PROPERTY_HINT_ARRAY_TYPE);
+			nodeAssert.equal(String(numberArrayProperty.hint_string), `${VARIANT_TYPE_FLOAT}:`);
+			const customResourceArrayProperty = getExportProperty("editor_custom_resource_array");
+			nodeAssert.equal(Number(customResourceArrayProperty.type), VARIANT_TYPE_ARRAY);
+			nodeAssert.equal(Number(customResourceArrayProperty.hint), PROPERTY_HINT_ARRAY_TYPE);
+			nodeAssert.equal(String(customResourceArrayProperty.hint_string), `${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:RuntimeArrayResource`);
 
 			const exportedResource = new Resource();
 			exportedResource.resource_name = "PersistentRuntimeResource";

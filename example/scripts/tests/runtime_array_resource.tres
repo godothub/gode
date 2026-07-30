@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="RuntimeArrayResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/tests/runtime_array_resource.ts" id="1_runtime_array_resource"]
+
+[resource]
+resource_name = "RuntimeArrayFixture"
+script = ExtResource("1_runtime_array_resource")
