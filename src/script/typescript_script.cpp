@@ -2,6 +2,7 @@
 #include "runtime/node_runtime.h"
 #include "runtime/value_convert.h"
 #include "script/typescript_compile_service.h"
+#include "script/typescript_interface_resource.h"
 #include "script/typescript_language.h"
 
 #include <tree_sitter/api.h>
@@ -193,6 +194,10 @@ static StringName class_name_from_class_node(TSNode class_node, const std::strin
 	return StringName(node_text(source, name_node).c_str());
 }
 
+static StringName interface_name_from_interface_node(TSNode interface_node, const std::string &source) {
+	return class_name_from_class_node(interface_node, source);
+}
+
 static bool node_text_is_default(TSNode node, const std::string &source) {
 	return !ts_node_is_null(node) && node_text(source, node) == "default";
 }
@@ -293,6 +298,32 @@ static TSNode find_class_declaration_by_name(TSNode root_node, uint32_t child_co
 		for (uint32_t j = 0; j < ts_node_child_count(child); j++) {
 			TSNode exported_child = ts_node_child(child, j);
 			if (strcmp(ts_node_type(exported_child), "class_declaration") == 0 && class_name_from_class_node(exported_child, source) == name) {
+				return exported_child;
+			}
+		}
+	}
+	return {};
+}
+
+static TSNode find_interface_declaration_by_name(TSNode root_node, uint32_t child_count, const std::string &source, const StringName &name) {
+	if (name.is_empty()) {
+		return {};
+	}
+
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(root_node, i);
+		if (strcmp(ts_node_type(child), "class_declaration") == 0) {
+			if (class_name_from_class_node(child, source) == name) {
+				return child;
+			}
+			continue;
+		}
+		if (strcmp(ts_node_type(child), "export_statement") != 0) {
+			continue;
+		}
+		for (uint32_t j = 0; j < ts_node_child_count(child); j++) {
+			TSNode exported_child = ts_node_child(child, j);
+			if (strcmp(ts_node_type(exported_child), "interface_declaration") == 0 && interface_name_from_interface_node(exported_child, source) == name) {
 				return exported_child;
 			}
 		}
@@ -745,6 +776,7 @@ enum class ExportTypeKind {
 	OBJECT,
 	RESOURCE,
 	NODE,
+	INTERFACE
 };
 
 struct ExportTypeClassification {
@@ -1554,6 +1586,12 @@ static void apply_export_type_classification(PropertyInfo &property, const Expor
 			}
 			return;
 		}
+		case ExportTypeKind::INTERFACE: {
+			property.type = Variant::OBJECT;
+			property.hint = PROPERTY_HINT_RESOURCE_TYPE;
+			property.hint_string = TypeScriptInterfaceResource::get_class_static();
+			property.class_name = TypeScriptInterfaceResource::get_class_static();
+		} break;
 		case ExportTypeKind::OBJECT:
 		case ExportTypeKind::RESOURCE:
 		case ExportTypeKind::NODE:
@@ -2277,9 +2315,9 @@ static bool parse_int_metadata_value(TSNode value, const std::string &source, in
 
 static bool resolve_property_hint_member(const std::string &member_name, PropertyHint &r_hint) {
 #define MATCH_PROPERTY_HINT(m_hint) \
-	if (member_name == #m_hint) {      \
-		r_hint = m_hint;                 \
-		return true;                     \
+	if (member_name == #m_hint) {   \
+		r_hint = m_hint;            \
+		return true;                \
 	}
 	MATCH_PROPERTY_HINT(PROPERTY_HINT_NONE)
 	MATCH_PROPERTY_HINT(PROPERTY_HINT_RANGE)
@@ -2546,7 +2584,7 @@ static bool method_node_is_accessor(TSNode method_node, TSNode name_node) {
 	return false;
 }
 
-static void parse_class_members(TSNode class_node, const std::string &source, const String &file_path, TSNode root_node, uint32_t child_count, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &static_methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, Dictionary> &rpc_configs, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
+static void parse_class_members(TSNode class_node, const std::string &source, const String &file_path, TSNode root_node, uint32_t child_count, HashMap<StringName, PropertyInfo> &properties, Vector<PropertyInfo> &property_list, HashMap<StringName, StringName> &interface_array_schemas, HashMap<StringName, Variant> &property_defaults, HashMap<StringName, MethodInfo> &methods, HashMap<StringName, MethodInfo> &static_methods, HashMap<StringName, MethodInfo> &signals, HashMap<StringName, Dictionary> &rpc_configs, HashMap<StringName, int> &member_lines, const HashMap<StringName, Vector<PropertyInfo>> &interfaces) {
 	TSNode body_node = ts_node_child_by_field_name(class_node, "body", 4);
 	if (ts_node_is_null(body_node)) {
 		return;
@@ -2706,6 +2744,27 @@ static void parse_class_members(TSNode class_node, const std::string &source, co
 				TSNode default_object_node = unwrap_metadata_expression(field_value_node);
 				if (!ts_node_is_null(default_object_node) && strcmp(ts_node_type(default_object_node), "object") == 0) {
 					parse_object_defaults(default_object_node, source, prefix, property_defaults);
+				}
+			} else if (!type_str.empty() && iface_key.contains("[]") && interfaces.has(iface_key.substr(0, iface_key.length() - 2))) {
+				StringName inner_type = iface_key.substr(0, iface_key.length() - 2);
+				if (interfaces.has(inner_type)) {
+					const StringName schema_id(String(file_path) + "::" + String(inner_type));
+					// The container remains a regular Godot Array. Its typed element is a
+					// Resource whose dynamic property list is populated from the interface.
+					pi.type = Variant::ARRAY;
+					pi.hint = PROPERTY_HINT_ARRAY_TYPE;
+					pi.hint_string = String::num_int64(Variant::OBJECT) + "/" + String::num_int64(PROPERTY_HINT_RESOURCE_TYPE) + ":" + String(TypeScriptInterfaceResource::get_class_static());
+					pi.class_name = StringName();
+					interface_array_schemas[field_name] = schema_id;
+					TypeScriptInterfaceResource::register_schema(schema_id, inner_type, interfaces);
+					properties[field_name] = pi;
+					property_list.push_back(pi);
+					if (!ts_node_is_null(field_value_node)) {
+						Variant default_value;
+						if (parse_default_value(field_value_node, source, pi.type, default_value)) {
+							property_defaults[field_name] = default_value;
+						}
+					}
 				}
 			} else {
 				properties[field_name] = pi;
@@ -2979,6 +3038,7 @@ bool TypeScriptScript::compile() const {
 	base_class_name = StringName();
 	base_script_path = String();
 	property_list.clear();
+	interface_array_schemas.clear();
 	methods.clear();
 	static_methods.clear();
 	signals.clear();
@@ -3047,7 +3107,7 @@ bool TypeScriptScript::compile() const {
 		base_class_qualifier = qualifier_from_extends_node(base_class_node, source);
 	}
 	base_script_path = resolve_imported_class_path(get_path(), source, root_node, child_count, base_class_name, base_class_qualifier);
-	parse_class_members(class_node, source, get_path(), root_node, child_count, properties, property_list, property_defaults, methods, static_methods, signals, rpc_configs, member_lines, interfaces);
+	parse_class_members(class_node, source, get_path(), root_node, child_count, properties, property_list, interface_array_schemas, property_defaults, methods, static_methods, signals, rpc_configs, member_lines, interfaces);
 	parse_static_exports(class_node, source, get_path(), root_node, child_count, properties, property_list, property_defaults);
 	parse_exported_field_defaults(class_node, source, properties, property_defaults);
 	collect_parent_properties(base_class_name, base_class_qualifier, source, root_node, child_count, get_path(), properties, property_list, property_defaults);

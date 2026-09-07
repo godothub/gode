@@ -35,6 +35,14 @@ const PROPERTY_HINT_RESOURCE_TYPE = 17;
 const PROPERTY_HINT_NODE_TYPE = 34;
 const RUNTIME_ARRAY_RESOURCE_SCRIPT_PATH = "res://scripts/tests/runtime_array_resource.ts";
 
+interface RuntimeExportInterfaceArrayElement {
+	label: string;
+	amount: number;
+	enabled: boolean;
+	tags: string[];
+	metadata: Record<string, number>;
+}
+
 function assert(condition: boolean, message: string): void {
 	if (!condition) {
 		throw new Error(message);
@@ -162,6 +170,9 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 
 	@Export()
 	editor_namespace_alias_resource_array: RuntimeExportTypes.RuntimeImportedResourceArray = [];
+
+	@Export()
+	editor_interface_array: RuntimeExportInterfaceArrayElement[] = [];
 
 	@Export()
 	editor_mixed_union: "automatic" | number = "automatic";
@@ -393,6 +404,7 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 				"editor_imported_generic_external_resource_array",
 				"editor_imported_generic_resource_dictionary",
 				"editor_namespace_alias_resource_array",
+				"editor_interface_array",
 				"editor_mixed_union",
 				"editor_mixed_object_union",
 				"editor_explicit_hint_enum",
@@ -443,6 +455,7 @@ class RuntimeIntegrationTest extends RuntimeBaseModule.RuntimeIntegrationBase {
 			assertArrayExportMetadata("editor_imported_generic_external_resource_array", `${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:RuntimeExternalResource`);
 			assertDictionaryExportMetadata("editor_imported_generic_resource_dictionary", `${VARIANT_TYPE_STRING}:;${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:RuntimeArrayResource`);
 			assertArrayExportMetadata("editor_namespace_alias_resource_array", `${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:RuntimeArrayResource`);
+			assertArrayExportMetadata("editor_interface_array", `${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:TypeScriptInterfaceResource`);
 			assertArrayExportMetadata("static_number_array", `${VARIANT_TYPE_FLOAT}:`);
 			assertArrayExportMetadata("static_custom_resource_array", `${VARIANT_TYPE_OBJECT}/${PROPERTY_HINT_RESOURCE_TYPE}:RuntimeArrayResource`);
 			assertDictionaryExportMetadata("static_record_dictionary", `${VARIANT_TYPE_STRING}:;${VARIANT_TYPE_FLOAT}:`);

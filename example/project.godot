@@ -37,5 +37,4 @@ paths=["res://addons/gode/binary/gode.gdextension"]
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-renderer/rendering_method="forward_plus"
 textures/vram_compression/import_etc2_astc=true

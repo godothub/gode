@@ -2,6 +2,7 @@
 #include "runtime/napi_error_utils.h"
 #include "runtime/node_runtime.h"
 #include "runtime/value_convert.h"
+#include "script/typescript_interface_resource.h"
 #include "script/typescript_script.h"
 #include <v8-isolate.h>
 #include <v8-locker.h>
@@ -332,6 +333,16 @@ void ScriptInstance::reload(bool p_keep_state) {
 }
 
 bool ScriptInstance::set(const StringName &p_name, const Variant &p_value) {
+	if (script.is_valid() && script->interface_array_schemas.has(p_name) && p_value.get_type() == Variant::ARRAY) {
+		const StringName schema_id = script->interface_array_schemas[p_name];
+		Array array = p_value;
+		for (int64_t i = 0; i < array.size(); i++) {
+			TypeScriptInterfaceResource *resource = Object::cast_to<TypeScriptInterfaceResource>(array[i]);
+			if (resource) {
+				resource->configure(schema_id);
+			}
+		}
+	}
 	if (placeholder) {
 		placeholder_properties[p_name] = p_value;
 		return true;

@@ -61,6 +61,28 @@ func _run_next() -> void:
 		if current_test.get("editor_record_dictionary") != {"from_gdscript": 8}:
 			_fail("RuntimeIntegrationTest typed string-key Dictionary did not round-trip through ScriptInstance")
 			return
+		if not current_test.get("editor_interface_array").is_empty():
+			_fail("RuntimeIntegrationTest interface array default was not empty")
+			return
+		var interface_element: Object = ClassDB.instantiate("TypeScriptInterfaceResource")
+		current_test.set("editor_interface_array", [interface_element])
+		var interface_fields: Array[String] = []
+		for property in interface_element.get_property_list():
+			interface_fields.append(str(property.name))
+		if not interface_fields.has("label") or not interface_fields.has("amount") or not interface_fields.has("enabled") or not interface_fields.has("tags") or not interface_fields.has("metadata"):
+			_fail("RuntimeIntegrationTest interface array element did not expose interface fields")
+			return
+		if interface_element.get("label") != "" or interface_element.get("amount") != 0 or interface_element.get("enabled") != false:
+			_fail("RuntimeIntegrationTest interface array scalar fields did not use Godot defaults")
+			return
+		if not interface_element.get("tags").is_empty() or not interface_element.get("metadata").is_empty():
+			_fail("RuntimeIntegrationTest interface array container fields did not use Godot defaults")
+			return
+		interface_element.set("label", "configured")
+		interface_element.set("amount", 9)
+		if interface_element.get("label") != "configured" or interface_element.get("amount") != 9:
+			_fail("RuntimeIntegrationTest interface array element edits did not round-trip")
+			return
 		var int_key_dictionary := {}
 		int_key_dictionary[7] = "seven"
 		current_test.set("editor_int_key_map", int_key_dictionary)

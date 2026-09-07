@@ -41,6 +41,7 @@ protected:
 	mutable godot::HashMap<godot::StringName, godot::MethodInfo> signals;
 	mutable godot::HashMap<godot::StringName, godot::PropertyInfo> properties;
 	mutable godot::Vector<godot::PropertyInfo> property_list;
+	mutable godot::HashMap<godot::StringName, godot::StringName> interface_array_schemas;
 	mutable godot::HashMap<godot::StringName, godot::Variant> property_defaults;
 	mutable godot::HashMap<godot::StringName, godot::Variant> constants;
 	mutable godot::HashMap<godot::StringName, int> member_lines;

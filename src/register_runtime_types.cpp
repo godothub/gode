@@ -2,6 +2,7 @@
 #include "runtime/gode_runtime_bridge.h"
 #include "runtime/node_runtime.h"
 #include "script/typescript_language.h"
+#include "script/typescript_interface_resource.h"
 #include "script/typescript_loader.h"
 #include "script/typescript_saver.h"
 #include "script/typescript_script.h"
@@ -22,6 +23,7 @@ void initialize_gode_runtime_module(godot::ModuleInitializationLevel p_level) {
 		return;
 	}
 	GDREGISTER_CLASS(gode::TypeScriptScript);
+	GDREGISTER_CLASS(gode::TypeScriptInterfaceResource);
 	GDREGISTER_CLASS(gode::TypeScriptLanguage);
 	GDREGISTER_CLASS(gode::TypeScriptSaver);
 	GDREGISTER_CLASS(gode::TypeScriptLoader);
