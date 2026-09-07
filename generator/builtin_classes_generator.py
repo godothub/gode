@@ -21,7 +21,7 @@ from .utils.type_mappings import (
 def napi_match_expr(type_name, index):
     value = f"info[{index}]"
     if type_name == 'int':
-        return f"({value}.IsBigInt())"
+        return f"({value}.IsNumber() || {value}.IsBigInt())"
     if type_name == 'float':
         return f"{value}.IsNumber()"
     if type_name == 'bool':

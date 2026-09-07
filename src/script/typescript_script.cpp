@@ -1324,7 +1324,7 @@ static ExportObjectResolution resolve_typescript_object_kind(
 		}
 	}
 
-	else if (!ts_node_is_null(class_node)) {
+	if (!ts_node_is_null(class_node)) {
 		StringName resolved_class_name = class_name_from_class_node(class_node, next_source);
 		if (resolved_class_name.is_empty()) {
 			resolved_class_name = lookup_class_name;
@@ -2745,7 +2745,7 @@ static void parse_class_members(TSNode class_node, const std::string &source, co
 				if (!ts_node_is_null(default_object_node) && strcmp(ts_node_type(default_object_node), "object") == 0) {
 					parse_object_defaults(default_object_node, source, prefix, property_defaults);
 				}
-			} else if (!type_str.empty() && iface_key.contains("[]")) {
+			} else if (!type_str.empty() && iface_key.contains("[]") && interfaces.has(iface_key.substr(0, iface_key.length() - 2))) {
 				StringName inner_type = iface_key.substr(0, iface_key.length() - 2);
 				if (interfaces.has(inner_type)) {
 					const StringName schema_id(String(file_path) + "::" + String(inner_type));
