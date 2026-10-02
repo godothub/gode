@@ -87,6 +87,20 @@ export default class Demo extends Node {
 
 ## Advanced Usage
 
+### Bulk Numeric Arrays
+
+Constructors, method arguments and property assignments taking these packed arrays accept the corresponding JavaScript typed input:
+
+| Godot packed array | JavaScript input |
+| --- | --- |
+| `PackedByteArray` | `Uint8Array`, `Uint8ClampedArray` |
+| `PackedInt32Array` | `Int32Array` |
+| `PackedInt64Array` | `BigInt64Array` |
+| `PackedFloat32Array` | `Float32Array` |
+| `PackedFloat64Array` | `Float64Array` |
+
+Gode copies the contiguous data into Godot-owned memory in one operation, honoring the view's offset and length. Changing the source after the call does not change submitted data. Int64 values preserve all 64 bits. Mismatched typed inputs throw `TypeError`; use the matching layout or an ordinary JavaScript array for element conversion.
+
 ### Calling Between TypeScript and GDScript
 
 Here is a complete node setup:
@@ -261,6 +275,8 @@ button.connect("pressed", () => {
 ### Resource Loading and Scene Instantiation
 
 Resources loaded from TypeScript are normal Godot resources and keep their Godot lifetime while wrapped by JavaScript:
+
+A JavaScript wrapper releases only the native reference it successfully acquired. Resources retained by Godot remain valid after the wrapper is garbage collected. For example, after passing a `StyleBoxFlat` to `button.add_theme_stylebox_override()`, no extra `style_refs` array is needed to keep the wrapper alive.
 
 ```ts
 import { Node, ResourceLoader } from "godot";

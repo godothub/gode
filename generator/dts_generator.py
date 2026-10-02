@@ -15,6 +15,7 @@ from .utils.binding_policy import (
 from .utils.type_mappings import (
     JS_CLASS_RENAME_MAP,
     PACKED_ARRAY_ELEMENT_TYPES,
+    PACKED_ARRAY_TYPED_INPUTS,
     parse_typedarray_element_type,
     parse_typeddictionary_types,
 )
@@ -169,7 +170,8 @@ def godot_type_to_ts(type_str: str, is_input: bool = False, singleton_class_name
     if is_input and type_str in PACKED_ARRAY_ELEMENT_TYPES:
         element_type = PACKED_ARRAY_ELEMENT_TYPES[type_str]
         element_ts = godot_type_to_ts(element_type, is_input=True, singleton_class_names=singleton_class_names)
-        return f'{type_str} | Array<{element_ts}>'
+        typed_input = f' | {PACKED_ARRAY_TYPED_INPUTS[type_str]}' if type_str in PACKED_ARRAY_TYPED_INPUTS else ''
+        return f'{type_str} | Array<{element_ts}>{typed_input}'
 
     if not is_input and type_str == 'Array':
         return JS_ARRAY_TYPE

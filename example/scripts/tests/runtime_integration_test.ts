@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import v8 from "node:v8";
 import vm from "node:vm";
 import * as GodotModule from "godot";
-import { Color, Engine, GD, GDArray, GDDictionary, GDString, GodotObject, Image, ImageTexture, Node, PackedInt32Array, PackedScene, PackedStringArray, PackedVector3Array, PropertyHint, PropertyHint as PropertyHintAlias, Resource, ResourceLoader, ResourceSaver, type VariantArgument, VariantType, Vector2, Vector2i, Vector3 } from "godot";
+import { AudioStreamWAV, Button, Color, DisplayServer, Engine, GD, GDArray, GDDictionary, GDString, GodotObject, Image, ImageTexture, MultiMesh, Node, PackedByteArray, PackedFloat64Array, PackedInt64Array, PackedFloat32Array, PackedInt32Array, PackedScene, PackedStringArray, PackedVector3Array, PropertyHint, PropertyHint as PropertyHintAlias, QuadMesh, Resource, ResourceLoader, ResourceSaver, StyleBoxFlat, type VariantArgument, VariantType, Vector2, Vector2i, Vector3, VideoStreamPlayback, WeakRef as GodotWeakRef } from "godot";
 import cjsFixture, { makeCommonPayload } from "./commonjs_fixture.cjs";
 import type RuntimeArrayResource from "./runtime_array_resource.js";
 import type RuntimeExternalResource from "./runtime_external_resource.js";
@@ -642,6 +642,36 @@ class RuntimeIntegrationTest extends RuntimeSameFileExportBase {
 			nodeAssert.equal(texture.get_image().get_width(), 2);
 			// @ts-expect-error Intentional invalid call to verify object validation.
 			nodeAssert.throws(() => ImageTexture.create_from_image({}), TypeError);
+
+			const themeButton = new Button();
+			this.add_child(themeButton);
+			const makeStyleReferences = (retain: boolean) => {
+				const style = new StyleBoxFlat();
+				style.bg_color = new Color(0.25, 0.5, 0.75, 1);
+				nodeAssert.equal(style.get_reference_count(), 1);
+				if (retain) {
+					themeButton.add_theme_stylebox_override("normal", style);
+					assert(style.get_reference_count() > 1, "Godot did not acquire its own StyleBox reference");
+				}
+				return { wrapper: new WeakRef(style), native: GD.weakref(style) as GodotWeakRef };
+			};
+			const retainedStyleRefs = makeStyleReferences(true);
+			const unretainedStyleRefs = makeStyleReferences(false);
+			for (let i = 0; i < 20; i++) {
+				await waitForEventLoopTurn();
+				forceGarbageCollection();
+				await waitForEventLoopTurn();
+			}
+			nodeAssert.equal(retainedStyleRefs.wrapper.deref(), undefined, "Godot must not keep the JS wrapper alive");
+			nodeAssert.equal(unretainedStyleRefs.wrapper.deref(), undefined, "Unretained JS wrapper was not collected");
+			nodeAssert.equal(unretainedStyleRefs.native.get_ref(), null, "Unretained native resource was not released");
+			const retainedStyle = retainedStyleRefs.native.get_ref() as StyleBoxFlat;
+			assert(retainedStyle instanceof StyleBoxFlat, "Godot-owned resource was released with its JS wrapper");
+			nodeAssert.equal(retainedStyle.bg_color.g, 0.5);
+			nodeAssert.equal(themeButton.get_theme_stylebox("normal").get_instance_id(), retainedStyle.get_instance_id());
+			themeButton.remove_theme_stylebox_override("normal");
+			themeButton.queue_free();
+
 			// @ts-expect-error Intentional invalid call to verify type validation.
 			nodeAssert.throws(() => Color.from_ok_hsl("0.58", 0.5, 0.79), TypeError);
 			nodeAssert.throws(() => Color.from_ok_hsl(NaN, 0.5, 0.79), TypeError);
@@ -706,6 +736,98 @@ class RuntimeIntegrationTest extends RuntimeSameFileExportBase {
 			// @ts-expect-error Intentional invalid constructor call to verify overload validation.
 			nodeAssert.throws(() => new GDArray(1), /No matching constructor overload for GDArray/);
 			const packedInts = new PackedInt32Array([1, 2, 3]);
+			const floatStorage = new Float32Array([99, 1.25, -2.5, 88]);
+			const floatView = floatStorage.subarray(1, 3);
+			const packedFloats = new PackedFloat32Array(floatView);
+			nodeAssert.equal(packedFloats.size(), 2);
+			nodeAssert.equal(packedFloats.get(0), 1.25);
+			nodeAssert.equal(packedFloats.get(1), -2.5);
+			floatView[0] = 7;
+			nodeAssert.equal(packedFloats.get(0), 1.25, "typed input must be copied, not retained");
+			packedFloats.append_array(new Float32Array([3.5]));
+			nodeAssert.equal(packedFloats.get(2), 3.5);
+			nodeAssert.equal(new PackedFloat32Array(new Float32Array(0)).size(), 0);
+			// @ts-expect-error Wrong element type must fail instead of reinterpreting bytes.
+			nodeAssert.throws(() => packedFloats.append_array(new Float64Array([1])), TypeError);
+			const bytes = new Uint8Array([99, 0, 255, 88]).subarray(1, 3);
+			const packedBytes = new PackedByteArray(bytes);
+			nodeAssert.deepEqual([packedBytes.get(0), packedBytes.get(1)], [0, 255]);
+			bytes[1] = 1;
+			nodeAssert.equal(packedBytes.get(1), 255);
+			packedBytes.append_array(new Uint8ClampedArray([-1, 300]));
+			nodeAssert.deepEqual([packedBytes.get(2), packedBytes.get(3)], [0, 255]);
+			nodeAssert.equal(new PackedByteArray(new Uint8Array(0)).size(), 0);
+			nodeAssert.equal(new PackedByteArray(new Uint8ClampedArray(0)).size(), 0);
+			const ints = new Int32Array([99, -2147483648, 2147483647, 88]).subarray(1, 3);
+			const packedTypedInts = new PackedInt32Array(ints);
+			nodeAssert.deepEqual([packedTypedInts.get(0), packedTypedInts.get(1)], [-2147483648, 2147483647]);
+			ints[0] = 0;
+			nodeAssert.equal(packedTypedInts.get(0), -2147483648);
+			packedTypedInts.append_array(new Int32Array([-7]));
+			nodeAssert.equal(packedTypedInts.get(2), -7);
+			nodeAssert.equal(new PackedInt32Array(new Int32Array(0)).size(), 0);
+			const bigInts = new BigInt64Array([99n, -9223372036854775808n, 9223372036854775807n, 88n]).subarray(1, 3);
+			const packedTypedBigInts = new PackedInt64Array(bigInts);
+			nodeAssert.deepEqual([packedTypedBigInts.get(0), packedTypedBigInts.get(1)], [-9223372036854775808n, 9223372036854775807n]);
+			bigInts[0] = 0n;
+			nodeAssert.equal(packedTypedBigInts.get(0), -9223372036854775808n);
+			packedTypedBigInts.append_array(new BigInt64Array([9007199254740993n]));
+			nodeAssert.equal(packedTypedBigInts.get(2), 9007199254740993n);
+			nodeAssert.equal(new PackedInt64Array(new BigInt64Array(0)).size(), 0);
+			const doubles = new Float64Array([99, Math.PI, -1e100, 88]).subarray(1, 3);
+			const packedDoubles = new PackedFloat64Array(doubles);
+			nodeAssert.deepEqual([packedDoubles.get(0), packedDoubles.get(1)], [Math.PI, -1e100]);
+			doubles[0] = 0;
+			nodeAssert.equal(packedDoubles.get(0), Math.PI);
+			packedDoubles.append_array(new Float64Array([1e-100]));
+			nodeAssert.equal(packedDoubles.get(2), 1e-100);
+			nodeAssert.equal(new PackedFloat64Array(new Float64Array(0)).size(), 0);
+			// @ts-expect-error Wrong layouts must fail without changing existing values.
+			nodeAssert.throws(() => packedBytes.append_array(new Int8Array([-1])), TypeError);
+			// @ts-expect-error A floating view is not an integer view.
+			nodeAssert.throws(() => new PackedInt32Array(new Float32Array([1])), TypeError);
+			// @ts-expect-error Unsigned int64 cannot be reinterpreted as signed int64.
+			nodeAssert.throws(() => packedTypedBigInts.append_array(new BigUint64Array([1n])), TypeError);
+			// @ts-expect-error Float32 and Float64 have different layouts.
+			nodeAssert.throws(() => packedDoubles.append_array(new Float32Array([1])), TypeError);
+			nodeAssert.equal(packedBytes.size(), 4);
+			nodeAssert.equal(packedTypedBigInts.size(), 3);
+			nodeAssert.equal(packedDoubles.size(), 3);
+			const wav = new AudioStreamWAV();
+			const wavInput = new Uint8Array([99, 10, 20, 88]).subarray(1, 3);
+			wav.data = wavInput;
+			wavInput[0] = 0;
+			nodeAssert.deepEqual([wav.data.get(0), wav.data.get(1)], [10, 20]);
+			nodeAssert.throws(() => {
+				// @ts-expect-error Incorrect property input must leave the stored data intact.
+				wav.data = new Float32Array([1]);
+			}, TypeError);
+			nodeAssert.deepEqual([wav.data.get(0), wav.data.get(1)], [10, 20]);
+			const playback = new VideoStreamPlayback();
+			// Zero frames exercises MethodBind conversion without an audio callback.
+			nodeAssert.equal(playback.mix_audio(0, new Float32Array([99, 1, 2, 88]).subarray(1, 3)), 0);
+			nodeAssert.equal(playback.mix_audio(0, new Float32Array(0)), 0);
+			nodeAssert.equal(playback.mix_audio(0, new PackedFloat32Array([1, 2])), 0);
+			nodeAssert.equal(playback.mix_audio(0, [1, 2]), 0);
+			// Ordinary array inputs keep the MethodBind path's existing Variant conversion.
+			nodeAssert.equal(playback.mix_audio(0, [NaN]), 0);
+			nodeAssert.equal(playback.mix_audio(0), 0);
+			// @ts-expect-error MethodBind inputs must enforce the same layout as ordinary methods.
+			nodeAssert.throws(() => playback.mix_audio(0, new Float64Array([1])), /PackedFloat32Array requires a Float32Array/);
+			// The headless dummy renderer does not store MultiMesh instance data.
+			if (DisplayServer.get_name() !== "headless") {
+				const mesh = new MultiMesh();
+				mesh.transform_format = MultiMesh.TRANSFORM_2D;
+				mesh.use_colors = true;
+				mesh.mesh = new QuadMesh();
+				mesh.instance_count = 1;
+				const meshBuffer = new Float32Array([1, 0, 0, 12, 0, 1, 0, 34, 0.25, 0.5, 0.75, 1]);
+				mesh.set_buffer(meshBuffer);
+				meshBuffer[3] = 99;
+				nodeAssert.equal(mesh.get_instance_transform_2d(0).origin.x, 12);
+				nodeAssert.equal(mesh.get_instance_transform_2d(0).origin.y, 34);
+				nodeAssert.equal(mesh.get_instance_color(0).g, 0.5);
+			}
 			nodeAssert.equal(packedInts.size(), 3);
 			nodeAssert.equal(packedInts.get(1), 2);
 			packedInts.append_array([4, 5]);

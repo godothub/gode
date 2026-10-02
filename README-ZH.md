@@ -87,6 +87,20 @@ export default class Demo extends Node {
 
 ## 进阶用法
 
+### 数值数组批量传递
+
+接收以下 PackedArray 的构造函数、方法参数和属性赋值，也支持对应的 JavaScript TypedArray：
+
+| Godot PackedArray | JavaScript 输入 |
+| --- | --- |
+| `PackedByteArray` | `Uint8Array`、`Uint8ClampedArray` |
+| `PackedInt32Array` | `Int32Array` |
+| `PackedInt64Array` | `BigInt64Array` |
+| `PackedFloat32Array` | `Float32Array` |
+| `PackedFloat64Array` | `Float64Array` |
+
+Gode 一次性将连续数据复制到 Godot 持有的内存中，并遵循视图的偏移和长度。调用后修改源数组不会改变已提交的数据。Int64 值保留完整的 64 位精度。类型不匹配的 TypedArray 会抛出 `TypeError`；需要逐元素转换时，可以使用普通 JavaScript 数组。
+
 ### TypeScript 与 GDScript 互相调用
 
 下面是一个完整的节点结构示例：
@@ -261,6 +275,8 @@ button.connect("pressed", () => {
 ### 加载资源与实例化场景
 
 TypeScript 中加载的资源是普通 Godot 资源，在 JavaScript wrapper 持有期间会保持正确的 Godot 生命周期：
+
+JavaScript 包装对象只释放自己成功取得的原生引用。只要 Godot 仍持有资源，包装对象被垃圾回收后资源依然有效。例如，将 `StyleBoxFlat` 交给 `button.add_theme_stylebox_override()` 后，无需额外使用 `style_refs` 数组保活包装对象。
 
 ```ts
 import { Node, ResourceLoader } from "godot";

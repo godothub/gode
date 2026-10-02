@@ -122,7 +122,10 @@ class ClassGenerator(CodeGenerator):
                 method['out_argument_indices'] = out_argument_indices
                 method['has_out_arguments'] = bool(out_argument_indices)
                 method['out_argument_indices_cpp'] = ', '.join(str(index) for index in out_argument_indices)
-                method['argument_count'] = len(method.get('arguments', []))
+                method['method_bind_argument_types_cpp'] = ', '.join(
+                    get_cpp_type(arg['type'], arg.get('meta', ''), refcounted_classes, True)
+                    for arg in method.get('arguments', [])
+                ) if out_argument_indices else ''
                 if class_name == 'Node' and method['name'] == 'get_node':
                      method['name_cpp'] = 'get_node_internal'
                 

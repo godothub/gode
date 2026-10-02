@@ -90,13 +90,33 @@ class GeneratorOutputTests(unittest.TestCase):
 			godot_type_to_ts("Dictionary"),
 		)
 		self.assertEqual(
-			"PackedInt32Array | Array<number | bigint>",
+			"PackedInt32Array | Array<number | bigint> | Int32Array",
 			godot_type_to_ts("PackedInt32Array", is_input=True),
+		)
+		self.assertEqual(
+			"PackedFloat32Array | Array<number> | Float32Array",
+			godot_type_to_ts("PackedFloat32Array", is_input=True),
 		)
 		self.assertEqual(
 			"PackedStringArray | Array<GDString | StringName | string>",
 			godot_type_to_ts("PackedStringArray", is_input=True),
 		)
+
+	def test_all_numeric_packed_array_inputs(self):
+		from generator.dts_generator import godot_type_to_ts
+		from generator.builtin_classes_generator import napi_match_expr
+		expected = {
+			"PackedByteArray": "Array<number | bigint> | Uint8Array | Uint8ClampedArray",
+			"PackedInt32Array": "Array<number | bigint> | Int32Array",
+			"PackedInt64Array": "Array<number | bigint> | BigInt64Array",
+			"PackedFloat32Array": "Array<number> | Float32Array",
+			"PackedFloat64Array": "Array<number> | Float64Array",
+		}
+		for packed, inputs in expected.items():
+			with self.subTest(packed=packed):
+				self.assertEqual(f"{packed} | {inputs}", godot_type_to_ts(packed, is_input=True))
+				self.assertTrue(napi_match_expr(packed, 0).startswith("info[0].IsTypedArray() ||"))
+				self.assertEqual(packed, godot_type_to_ts(packed))
 
 	def test_property_accessor_resolution_is_shared_and_stable(self):
 		from generator.utils.binding_policy import (
@@ -131,7 +151,7 @@ class GeneratorOutputTests(unittest.TestCase):
 			napi_match_expr("Array", 0),
 		)
 		self.assertEqual(
-			"info[0].IsArray() || (info[0].IsObject() && info[0].As<Napi::Object>().InstanceOf(PackedInt32ArrayBinding::constructor.Value()))",
+			"info[0].IsTypedArray() || info[0].IsArray() || (info[0].IsObject() && info[0].As<Napi::Object>().InstanceOf(PackedInt32ArrayBinding::constructor.Value()))",
 			napi_match_expr("PackedInt32Array", 0),
 		)
 		self.assertEqual("info[1].IsArray() || info[1].IsObject()", napi_match_expr("typedarray::Node", 1))

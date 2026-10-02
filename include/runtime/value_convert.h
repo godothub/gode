@@ -25,6 +25,11 @@ void sync_godot_array_to_js_array(Napi::Env env, const Napi::Value &target, cons
 void sync_godot_variant_out_argument(Napi::Env env, const Napi::Value &target, const godot::Variant &variant);
 int64_t napi_to_godot_int64(Napi::Value value);
 uint64_t napi_to_godot_uint64(Napi::Value value);
+godot::PackedByteArray js_uint8_array_to_packed_array(const Napi::Uint8Array &value);
+godot::PackedInt32Array js_int32_array_to_packed_array(const Napi::Int32Array &value);
+godot::PackedInt64Array js_int64_array_to_packed_array(const Napi::BigInt64Array &value);
+godot::PackedFloat32Array js_float32_array_to_packed_array(const Napi::Float32Array &value);
+godot::PackedFloat64Array js_float64_array_to_packed_array(const Napi::Float64Array &value);
 
 template <typename T>
 Napi::Value godot_result_to_napi(Napi::Env env, const T &value) {
@@ -375,6 +380,56 @@ std::remove_const_t<std::remove_reference_t<T>> napi_to_godot(Napi::Value value)
 		}
 		return napi_to_godot(value);
 	} else if constexpr (is_godot_packed_array_v<ClearType>) {
+		if constexpr (std::is_same_v<ClearType, godot::PackedByteArray>) {
+			if (value.IsTypedArray()) {
+				const auto type = value.As<Napi::TypedArray>().TypedArrayType();
+				if (type != napi_uint8_array && type != napi_uint8_clamped_array) {
+					Napi::TypeError::New(value.Env(), "PackedByteArray requires a Uint8Array or Uint8ClampedArray typed input").ThrowAsJavaScriptException();
+					return ClearType();
+				}
+				return js_uint8_array_to_packed_array(value.As<Napi::Uint8Array>());
+			}
+		}
+		else if constexpr (std::is_same_v<ClearType, godot::PackedInt32Array>) {
+			if (value.IsTypedArray()) {
+				const auto type = value.As<Napi::TypedArray>().TypedArrayType();
+				if (type != napi_int32_array) {
+					Napi::TypeError::New(value.Env(), "PackedInt32Array requires a Int32Array typed input").ThrowAsJavaScriptException();
+					return ClearType();
+				}
+				return js_int32_array_to_packed_array(value.As<Napi::Int32Array>());
+			}
+		}
+		else if constexpr (std::is_same_v<ClearType, godot::PackedInt64Array>) {
+			if (value.IsTypedArray()) {
+				const auto type = value.As<Napi::TypedArray>().TypedArrayType();
+				if (type != napi_bigint64_array) {
+					Napi::TypeError::New(value.Env(), "PackedInt64Array requires a BigInt64Array typed input").ThrowAsJavaScriptException();
+					return ClearType();
+				}
+				return js_int64_array_to_packed_array(value.As<Napi::BigInt64Array>());
+			}
+		}
+		else if constexpr (std::is_same_v<ClearType, godot::PackedFloat32Array>) {
+			if (value.IsTypedArray()) {
+				const auto type = value.As<Napi::TypedArray>().TypedArrayType();
+				if (type != napi_float32_array) {
+					Napi::TypeError::New(value.Env(), "PackedFloat32Array requires a Float32Array typed input").ThrowAsJavaScriptException();
+					return ClearType();
+				}
+				return js_float32_array_to_packed_array(value.As<Napi::Float32Array>());
+			}
+		}
+		else if constexpr (std::is_same_v<ClearType, godot::PackedFloat64Array>) {
+			if (value.IsTypedArray()) {
+				const auto type = value.As<Napi::TypedArray>().TypedArrayType();
+				if (type != napi_float64_array) {
+					Napi::TypeError::New(value.Env(), "PackedFloat64Array requires a Float64Array typed input").ThrowAsJavaScriptException();
+					return ClearType();
+				}
+				return js_float64_array_to_packed_array(value.As<Napi::Float64Array>());
+			}
+		}
 		if (value.IsArray()) {
 			return js_array_to_packed_array<ClearType>(value.As<Napi::Array>());
 		}

@@ -44,8 +44,7 @@ void {{ class_name }}Binding_wrap(const Napi::Object &obj, godot::Object *instan
     binding->referenced_instance = false;
     godot::RefCounted *ref = godot::Object::cast_to<godot::RefCounted>(binding->instance);
     if (ref) {
-        ref->reference();
-        binding->referenced_instance = true;
+        binding->referenced_instance = ref->reference();
     }
 }
 
@@ -230,12 +229,11 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
     if (instance) {
         internal_object_id = instance->get_instance_id();
         {% if is_ref_counted %}
-        if (!owns_instance) {
-            godot::RefCounted *ref = godot::Object::cast_to<godot::RefCounted>(instance);
-            if (ref) {
-                ref->reference();
-                referenced_instance = true;
-            }
+        godot::RefCounted *ref = dynamic_cast<godot::RefCounted *>(instance);
+        if (ref) {
+            referenced_instance = owns_instance
+                ? ref->init_ref()   // New object: claim its initial reference.
+                : ref->reference(); // Existing object: acquire a reference.
         }
         {% endif %}
         register_godot_instance(instance, info.This().As<Napi::Object>());
@@ -248,7 +246,7 @@ Napi::Value {{ class_name }}Binding::init(Napi::Env env, Napi::Object exports) {
         godot::Object* obj = godot::ObjectDB::get_instance(internal_object_id);
         if (obj) {
             godot::RefCounted* ref = godot::Object::cast_to<godot::RefCounted>(obj);
-            if (ref && (owns_instance || referenced_instance)) {
+            if (ref && referenced_instance) {
                 if (ref->unreference()) {
                     godot::memdelete(ref);
                 }
@@ -307,14 +305,13 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
     };
     {% endif %}
     {% if method.has_out_arguments %}
-    return call_class_method_bind(
+    return call_class_method_bind<{{ method.method_bind_argument_types_cpp }}>(
             {{ "nullptr" if method.is_static else "instance" }},
             "{{ godot_class_name }}",
             "{{ method.name }}",
             {{ method.hash }},
             {{ "true" if method.return_type else "false" }},
             info,
-            {{ method.argument_count }},
             {{ "default_args" if method.has_default_args else "std::vector<Napi::Value>{}" }},
             { {{ method.out_argument_indices_cpp }} });
     {% elif method.live_property_name and not method.is_static and not method.is_vararg %}

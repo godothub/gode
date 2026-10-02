@@ -29,6 +29,15 @@ PACKED_ARRAY_ELEMENT_TYPES = {
 
 PACKED_ARRAY_TYPES = frozenset(PACKED_ARRAY_ELEMENT_TYPES)
 
+# Exact native element layouts accepted by the bulk-copy conversion path.
+PACKED_ARRAY_TYPED_INPUTS = {
+    'PackedByteArray': 'Uint8Array | Uint8ClampedArray',
+    'PackedInt32Array': 'Int32Array',
+    'PackedInt64Array': 'BigInt64Array',
+    'PackedFloat32Array': 'Float32Array',
+    'PackedFloat64Array': 'Float64Array',
+}
+
 JS_CLASS_RENAME_MAP = {
     'Object': 'GodotObject',
     'String': 'GDString',

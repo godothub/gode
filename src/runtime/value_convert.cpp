@@ -3,6 +3,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -62,6 +63,47 @@
 using namespace godot;
 
 namespace gode {
+
+template <typename PackedArray, typename JsArray>
+static PackedArray copy_numeric_typed_array(const JsArray &value) {
+	PackedArray array;
+	const size_t length = value.ElementLength();
+	using Element = typename packed_array_element<PackedArray>::type;
+	if (length > static_cast<size_t>(std::numeric_limits<int64_t>::max()) ||
+		length > std::numeric_limits<size_t>::max() / sizeof(Element)) {
+		Napi::RangeError::New(value.Env(), "TypedArray is too large for Godot").ThrowAsJavaScriptException();
+		return array;
+	}
+	if (array.resize(static_cast<int64_t>(length)) != 0) {
+		Napi::Error::New(value.Env(), "Could not allocate Godot PackedArray").ThrowAsJavaScriptException();
+		return array;
+	}
+	if (length != 0) {
+		// Data() includes the view's byte offset. Godot owns this copy after the call.
+		std::memcpy(array.ptrw(), value.Data(), length * sizeof(Element));
+	}
+	return array;
+}
+
+godot::PackedByteArray js_uint8_array_to_packed_array(const Napi::Uint8Array &value) {
+	return copy_numeric_typed_array<godot::PackedByteArray>(value);
+}
+
+godot::PackedInt32Array js_int32_array_to_packed_array(const Napi::Int32Array &value) {
+	return copy_numeric_typed_array<godot::PackedInt32Array>(value);
+}
+
+godot::PackedInt64Array js_int64_array_to_packed_array(const Napi::BigInt64Array &value) {
+	return copy_numeric_typed_array<godot::PackedInt64Array>(value);
+}
+
+godot::PackedFloat32Array js_float32_array_to_packed_array(const Napi::Float32Array &value) {
+	return copy_numeric_typed_array<godot::PackedFloat32Array>(value);
+}
+
+godot::PackedFloat64Array js_float64_array_to_packed_array(const Napi::Float64Array &value) {
+	return copy_numeric_typed_array<godot::PackedFloat64Array>(value);
+}
 
 static std::unordered_map<std::string, ClassInfo> class_registry;
 static std::vector<std::string> class_order;

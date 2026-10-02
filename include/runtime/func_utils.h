@@ -111,6 +111,18 @@ inline bool throw_if_godot_call_failed(Napi::Env env, const GDExtensionCallError
 	return true;
 }
 
+template <typename Param>
+inline godot::Variant convert_method_bind_argument(Napi::Value value) {
+	using ClearType = std::remove_const_t<std::remove_reference_t<Param>>;
+	if constexpr (is_godot_packed_array_v<ClearType>) {
+		if (value.IsTypedArray()) {
+			return napi_to_godot<Param>(value);
+		}
+	}
+	return napi_to_godot(value);
+}
+
+template <typename... P>
 inline Napi::Value call_class_method_bind(
 		godot::Object *instance,
 		const char *godot_class_name,
@@ -118,11 +130,10 @@ inline Napi::Value call_class_method_bind(
 		uint32_t method_hash,
 		bool has_return,
 		const Napi::CallbackInfo &info,
-		std::size_t target_count,
 		const std::vector<Napi::Value> &default_args,
 		std::initializer_list<std::size_t> out_arg_indices) {
 	std::vector<Napi::Value> args = to_args_array(info);
-	if (!prepare_fixed_args(args, target_count, default_args, info.Env())) {
+	if (!prepare_fixed_args(args, sizeof...(P), default_args, info.Env())) {
 		return info.Env().Undefined();
 	}
 
@@ -131,11 +142,11 @@ inline Napi::Value call_class_method_bind(
 	variant_args.reserve(args.size());
 	arg_ptrs.reserve(args.size());
 
-	for (const auto &arg : args) {
-		variant_args.push_back(napi_to_godot(arg));
-		if (info.Env().IsExceptionPending()) {
-			return info.Env().Undefined();
-		}
+	std::size_t arg_index = 0;
+	const bool converted = ((variant_args.emplace_back(convert_method_bind_argument<P>(args[arg_index++])),
+			!info.Env().IsExceptionPending()) && ...);
+	if (!converted) {
+		return info.Env().Undefined();
 	}
 	for (size_t i = 0; i < variant_args.size(); i++) {
 		arg_ptrs.push_back(&variant_args[i]);
