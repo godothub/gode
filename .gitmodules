@@ -1,3 +1,7 @@
+[submodule "third/godot-js"]
+	path = third/godot-js
+	url = https://github.com/godothub/godot-js.git
+
 [submodule "third/godot-cpp"]
 	path = third/godot-cpp
 	url = https://github.com/godotengine/godot-cpp.git
