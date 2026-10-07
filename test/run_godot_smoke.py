@@ -74,10 +74,10 @@ def godot_resource_path(project, resource_path):
 	return project / resource_path.removeprefix("res://")
 
 
-def ensure_editor_extension_manifest(project, extension_path):
+def ensure_editor_extension_manifest(project, extension_path, template_path=DEFAULT_EDITOR_EXTENSION_TEMPLATE):
 	if extension_path != DEFAULT_EDITOR_EXTENSION:
 		return
-	template = godot_resource_path(project, DEFAULT_EDITOR_EXTENSION_TEMPLATE)
+	template = godot_resource_path(project, template_path)
 	if not template.exists():
 		raise FileNotFoundError(f"GDExtension template was not found: {template}")
 	manifest = godot_resource_path(project, extension_path)
@@ -88,14 +88,14 @@ def ensure_editor_extension_manifest(project, extension_path):
 	manifest.write_text(template_text, encoding="utf-8")
 
 
-def ensure_extension_list(project, extension_paths):
+def ensure_extension_list(project, extension_paths, editor_template=DEFAULT_EDITOR_EXTENSION_TEMPLATE):
 	if not extension_paths:
 		return
 	if isinstance(extension_paths, str):
 		extension_paths = [extension_paths]
 
 	for extension_path in extension_paths:
-		ensure_editor_extension_manifest(project, extension_path)
+		ensure_editor_extension_manifest(project, extension_path, editor_template)
 		manifest = godot_resource_path(project, extension_path)
 		if not manifest.exists():
 			raise FileNotFoundError(f"GDExtension manifest was not found: {manifest}")
@@ -174,7 +174,7 @@ def run_smoke(args):
 	extensions = [args.extension]
 	if args.editor_extension:
 		extensions.append(args.editor_extension)
-	ensure_extension_list(project, extensions)
+	ensure_extension_list(project, extensions, args.editor_template)
 
 	command = [
 		str(godot),
@@ -232,6 +232,7 @@ def build_parser():
 	parser.add_argument("--scene", default="res://scenes/tests_runner.tscn", help="Godot scene path to run.")
 	parser.add_argument("--extension", default=DEFAULT_EXTENSION, help="GDExtension manifest path to register before running.")
 	parser.add_argument("--editor-extension", default=DEFAULT_EDITOR_EXTENSION, help="Editor GDExtension manifest path to register for development-time TypeScript compilation.")
+	parser.add_argument("--editor-template", default=DEFAULT_EDITOR_EXTENSION_TEMPLATE, help="Editor manifest template, including the addon path for Lite builds.")
 	parser.add_argument("--marker", default=DEFAULT_MARKER, help="Output marker that proves the JS test completed.")
 	parser.add_argument("--timeout", type=int, default=45, help="Seconds before the Godot process is terminated.")
 	parser.add_argument("--strict-exit-leaks", action="store_true", help="Fail if Godot reports exit-time leaks.")
