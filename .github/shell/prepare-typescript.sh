@@ -54,6 +54,7 @@ fi
 
 if [ "$force" -eq 0 ] && [ -f "$output_directory/package.json" ] && [ -f "$output_directory/lib/typescript.js" ]; then
 	if grep -q "\"version\": \"$typescript_version\"" "$output_directory/package.json"; then
+		python3 "$script_dir/trim-typescript.py" "$output_directory"
 		printf 'TypeScript %s already prepared at %s\n' "$typescript_version" "$output_directory"
 		exit 0
 	fi
@@ -98,6 +99,7 @@ fi
 rm -rf "$output_directory"
 mkdir -p "$output_directory"
 tar -xzf "$archive" -C "$output_directory" --strip-components=1
+python3 "$script_dir/trim-typescript.py" "$output_directory"
 
 if [ ! -f "$output_directory/lib/typescript.js" ]; then
 	printf 'TypeScript compiler was not extracted correctly: %s\n' "$output_directory/lib/typescript.js" >&2

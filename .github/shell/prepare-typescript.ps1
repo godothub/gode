@@ -22,9 +22,18 @@ if (-not $OutputDirectory) {
 $packageJson = Join-Path $OutputDirectory "package.json"
 $typescriptRuntime = Join-Path $OutputDirectory "lib/typescript.js"
 
+function Trim-TypeScriptPackage {
+	$python = Get-Command python -CommandType Application -ErrorAction Stop
+	& $python.Source (Join-Path $repoRoot ".github/shell/trim-typescript.py") $OutputDirectory
+	if ($LASTEXITCODE -ne 0) {
+		throw "Failed to trim the embedded TypeScript package."
+	}
+}
+
 if (-not $Force -and (Test-Path $packageJson) -and (Test-Path $typescriptRuntime)) {
 	$packageText = Get-Content -LiteralPath $packageJson -Raw
 	if ($packageText -match ('"version"\s*:\s*"' + [Regex]::Escape($Version) + '"')) {
+		Trim-TypeScriptPackage
 		Write-Host "TypeScript $Version already prepared at $OutputDirectory"
 		exit 0
 	}
@@ -95,6 +104,7 @@ try {
 	if ($LASTEXITCODE -ne 0) {
 		throw "Failed to extract TypeScript archive with exit code $LASTEXITCODE."
 	}
+	Trim-TypeScriptPackage
 
 	if (-not (Test-Path $typescriptRuntime)) {
 		throw "TypeScript compiler was not extracted correctly: $typescriptRuntime"
