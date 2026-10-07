@@ -2,6 +2,7 @@
 
 - Updated the embedded Node.js to `24.21.0`.
 - Added the lightweight godot-js addon with Web export support.
+- Reduced addon size and added Android editor support.
 - Fixed relative TypeScript import failures in exported projects.
 
 ## 2.4.5

@@ -104,6 +104,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ needs.validate.outputs.tag }}
           prerelease: ${{ inputs.prerelease == 'true' }}
           body_path: ${{ steps.release_notes.outputs.path }}
