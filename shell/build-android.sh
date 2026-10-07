@@ -95,6 +95,7 @@ addon_root="$repo_root/example/addons/gode"
 if [ "${GODE_LITE:-OFF}" = ON ]; then addon_root="$repo_root/third/godot-js/addons/godot-js"; fi
 bin_dir="$addon_root/binary/android/$architecture"
 expected_library="$bin_dir/libgode_runtime.so"
+editor_library="$addon_root/binary/editor/android/$architecture/libgode_editor.so"
 libnode_library="$repo_root/libnode/android/$architecture/libnode.a"
 
 if [ -z "$python_executable" ]; then
@@ -302,9 +303,11 @@ cmake \
 printf 'Building gode (%s, android/%s)...\n' "$configuration" "$architecture"
 cmake --build "$build_dir" --target gode --config "$configuration" --parallel "$jobs"
 
-if [ ! -f "$expected_library" ]; then
-	printf 'Build finished, but expected GDExtension library was not found: %s\n' "$expected_library" >&2
-	exit 1
-fi
+for library in "$expected_library" "$editor_library"; do
+	if [ ! -f "$library" ]; then
+		printf 'Build finished, but expected GDExtension library was not found: %s\n' "$library" >&2
+		exit 1
+	fi
+done
 
 printf 'Built GDExtension library:\n  %s\n' "$expected_library"

@@ -80,6 +80,7 @@ required_binaries=(
 	"binary/editor/windows/x64/libgode_editor.dll"
 	"binary/editor/linux/x64/libgode_editor.so"
 	"binary/editor/macos/arm64/libgode_editor.dylib"
+	"binary/editor/android/arm64/libgode_editor.so"
 )
 
 for file in "${required_files[@]}"; do

@@ -405,6 +405,10 @@ if ($LASTEXITCODE -ne 0) {
 if (-not (Test-Path $expectedLibrary)) {
 	throw "Build finished, but expected GDExtension library was not found: $expectedLibrary"
 }
+$editorLibrary = Join-Path $addonRoot "binary/editor/android/$Architecture/libgode_editor.so"
+if (-not (Test-Path $editorLibrary)) {
+	throw "Build finished, but Android editor library was not found: $editorLibrary"
+}
 
 Write-Host "Built GDExtension library:"
 Write-Host "  $expectedLibrary"
