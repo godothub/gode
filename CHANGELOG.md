@@ -1,3 +1,9 @@
+## 2.4.6
+
+- Updated the embedded Node.js to `24.21.0`.
+- Added the lightweight godot-js addon with Web export support.
+- Fixed relative TypeScript import failures in exported projects.
+
 ## 2.4.5
 
 - Fixed Inspector display and defaults for inherited exported properties.
