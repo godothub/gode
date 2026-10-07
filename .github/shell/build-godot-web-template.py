@@ -103,7 +103,7 @@ def main():
     recipe.write_text(text.replace(anchor, anchor + extension, 1))
     subprocess.run(['scons', 'platform=web', 'arch=wasm32', 'target=template_release',
                     'threads=yes', 'dlink_enabled=yes', 'debug_symbols=no',
-                    'use_closure_compiler=no', 'lto=none', f'-j{args.jobs}'],
+                    'use_closure_compiler=no', 'optimize=speed', 'lto=thin', f'-j{args.jobs}'],
                    cwd=source, check=True)
     name = 'godot.web.template_release.wasm32.dlink.zip'
     result = output / name
@@ -118,6 +118,7 @@ def main():
     (output / 'BUILD-METADATA.json').write_text(json.dumps({
         'godot_commit': commit, 'emscripten': version, 'arch': 'wasm32',
         'threads': True, 'dynamic_linking': True, 'wasm_exceptions': True,
+        'optimization': 'speed', 'lto': 'thin',
         'fixes': ['webgl-import-aliases', 'worker-memory-initialization', 'dlopen-worker-wakeup'],
     }, indent=2) + '\n')
     print(result)
