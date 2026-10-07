@@ -42,6 +42,11 @@ void register_classes(Napi::Env env, Napi::Object exports) {
     {% endif %}
     {
         auto getter_{{ singleton.name }} = [](const Napi::CallbackInfo &info) -> Napi::Value {
+            {% if singleton.name == "EditorInterface" %}
+            // The runtime initializes before the editor creates this singleton.
+            godot::Engine *engine = godot::Engine::get_singleton();
+            if (!engine || !engine->has_singleton("EditorInterface")) return info.Env().Null();
+            {% endif %}
             godot::{{ singleton.type }}* instance = godot::{{ singleton.type }}::get_singleton();
             if (!instance) return info.Env().Null();
             return gode::wrap_godot_object(info.Env(), instance, "{{ singleton.binding_type }}");
