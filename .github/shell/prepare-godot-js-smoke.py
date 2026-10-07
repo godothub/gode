@@ -32,7 +32,7 @@ declare module 'pure-js-probe' {
 }
 ''')
     (project / 'scripts/lite_probe.ts').write_text('''
-import { Node } from 'godot';
+import { Node, RenderingServer, OS } from 'godot';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import add from 'pure-js-probe';
@@ -48,6 +48,24 @@ export default class LiteProbe extends Node {
     assert.throws(() => require('node:crypto'));
     assert.throws(() => require('node:child_process'));
     assert.equal(typeof Intl, 'undefined');
+    const nodeConstants = this as unknown as Node & { NOTIFICATION_READY: number; ProcessMode: typeof Node.ProcessMode };
+    assert.equal(nodeConstants.NOTIFICATION_READY, Node.NOTIFICATION_READY);
+    assert.equal(Node.ProcessMode[Node.PROCESS_MODE_ALWAYS], 'PROCESS_MODE_ALWAYS');
+    assert.equal(nodeConstants.ProcessMode[Node.PROCESS_MODE_ALWAYS], 'PROCESS_MODE_ALWAYS');
+    assert.notEqual(nodeConstants.ProcessMode, Node.ProcessMode);
+    assert.equal(RenderingServer.ArrayFormat.ARRAY_FLAG_FORMAT_VERSION_2, 34359738368);
+    assert.equal(RenderingServer.ArrayFormat[34359738368], 'ARRAY_FLAG_FORMAT_CURRENT_VERSION');
+    const sentinel = new Error('binding conversion sentinel');
+    assert.throws(() => this.add_child(new Proxy({}, { has() { throw sentinel; } }) as any),
+      (error: unknown) => error === sentinel);
+    assert.throws(() => this.set_meta('hostile', { get value() { throw sentinel; } }),
+      (error: unknown) => error === sentinel);
+    assert.equal(this.has_meta('hostile'), false);
+    assert.equal(process._linkedBinding('godot').EditorPlugin, undefined);
+    if (!OS.has_feature('editor')) {
+      assert.equal((globalThis as any).__gode_compile_typescript_project, undefined);
+      assert.equal((globalThis as any).__gode_typescript_compiler_boot_error, undefined);
+    }
     console.log('[GodotJsLiteTest] pure JS npm and hash passed');
   }
 }

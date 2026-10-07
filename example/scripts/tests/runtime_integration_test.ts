@@ -318,6 +318,17 @@ class RuntimeIntegrationTest extends RuntimeSameFileExportBase {
 			const vector2PrototypeEnums = new Vector2() as Vector2 & { AXIS_X: number; Axis: { AXIS_Y: number } };
 			nodeAssert.equal(vector2PrototypeEnums.AXIS_X, Vector2.AXIS_X);
 			nodeAssert.equal(vector2PrototypeEnums.Axis.AXIS_Y, Vector2.Axis.AXIS_Y);
+			const nodePrototypeEnums = this as unknown as Node & { NOTIFICATION_READY: number; PROCESS_MODE_ALWAYS: number; ProcessMode: typeof Node.ProcessMode };
+			nodeAssert.equal(nodePrototypeEnums.NOTIFICATION_READY, Node.NOTIFICATION_READY);
+			nodeAssert.equal(nodePrototypeEnums.PROCESS_MODE_ALWAYS, Node.PROCESS_MODE_ALWAYS);
+			nodeAssert.equal(Node.ProcessMode[Node.PROCESS_MODE_ALWAYS], "PROCESS_MODE_ALWAYS");
+			nodeAssert.equal(nodePrototypeEnums.ProcessMode[Node.PROCESS_MODE_ALWAYS], "PROCESS_MODE_ALWAYS");
+			nodeAssert.notEqual(nodePrototypeEnums.ProcessMode, Node.ProcessMode);
+			const arrayFormat = GodotModule.RenderingServer.ArrayFormat;
+			nodeAssert.equal(arrayFormat.ARRAY_FLAG_FORMAT_VERSION_2, 34359738368);
+			nodeAssert.equal(arrayFormat[34359738368], "ARRAY_FLAG_FORMAT_CURRENT_VERSION");
+			nodeAssert.equal(arrayFormat.ARRAY_FLAG_FORMAT_CURRENT_VERSION, arrayFormat.ARRAY_FLAG_FORMAT_VERSION_2);
+			nodeAssert.equal((GodotModule as unknown as Record<string, unknown>).EditorPlugin, undefined);
 
 			nodeAssert.equal(cjsFixture.kind, "commonjs-runtime-fixture");
 			nodeAssert.deepEqual(makeCommonPayload(3).values, [3, 4, 5]);
