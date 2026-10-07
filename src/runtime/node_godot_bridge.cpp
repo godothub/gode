@@ -487,7 +487,14 @@ void prepare_native_addon_host() {
 #endif
 }
 
+static Napi::Value sha256_text(const Napi::CallbackInfo &info) {
+	const std::string text = info[0].ToString().Utf8Value();
+	const godot::String hash = godot::String::utf8(text.data(), text.size()).sha256_text();
+	return Napi::String::New(info.Env(), hash.utf8().get_data());
+}
+
 void install_exports(Napi::Env env, Napi::Object exports) {
+	exports.Set("sha256_text", Napi::Function::New(env, sha256_text));
 	exports.Set("fs_readFile", Napi::Function::New(env, fs_readFile));
 	exports.Set("fs_stat", Napi::Function::New(env, fs_stat));
 	exports.Set("globalize_path", Napi::Function::New(env, globalize_path));

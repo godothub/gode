@@ -273,15 +273,17 @@ function Get-CachedGenerator {
 }
 
 $repoRoot = Get-RepoRoot
+$addonRoot = if ($env:GODE_LITE -eq "ON") { Join-Path $repoRoot "third/godot-js/addons/godot-js" } else { Join-Path $repoRoot "example/addons/gode" }
 $buildRoot = Join-Path $repoRoot "build"
+if ($env:GODE_LITE -eq "ON") { $buildRoot = Join-Path $buildRoot "godot-js" }
 $visualStudioInstance = Get-VisualStudioCppTools
 $selectedGenerator = Select-CMakeGenerator -RequestedGenerator $Generator -VisualStudioInstance $visualStudioInstance
 $configDir = $Configuration.ToLowerInvariant()
 $buildDir = Join-Path $buildRoot "windows/$Architecture/$configDir"
-$binDir = Join-Path $repoRoot "example/addons/gode/binary/windows/$Architecture"
+$binDir = Join-Path $addonRoot "binary/windows/$Architecture"
 $runtimeLibrary = Join-Path $binDir "libgode_runtime.dll"
 $nodeHelper = Join-Path $binDir "gode_node.exe"
-$editorLibrary = Join-Path $repoRoot "example/addons/gode/binary/editor/windows/$Architecture/libgode_editor.dll"
+$editorLibrary = Join-Path $addonRoot "binary/editor/windows/$Architecture/libgode_editor.dll"
 $libnodeLibrary = Join-Path $repoRoot "libnode/windows/$Architecture/libnode.lib"
 $jobCount = if ($Jobs -gt 0) { $Jobs } else { Get-DefaultJobCount }
 $godotCppTarget = Get-GodotCppTarget -BuildConfiguration $Configuration
@@ -333,6 +335,7 @@ $configureArgs = @(
 	"-DCMAKE_CXX_COMPILER=$(Join-Path $visualStudioToolPath 'cl.exe')",
 	"-DPython3_EXECUTABLE=$pythonExecutable",
 	"-DGODE_RUN_CODEGEN=$((-not $SkipCodegen).ToString().ToUpperInvariant())",
+	"-DGODE_LITE=$(if ($env:GODE_LITE) { $env:GODE_LITE } else { 'OFF' })",
 	"-DGODE_TARGET_ARCH=$Architecture",
 	"-DGODOTCPP_TARGET=$godotCppTarget"
 )
@@ -354,7 +357,9 @@ if ($LASTEXITCODE -ne 0) {
 	throw "CMake build failed with exit code $LASTEXITCODE."
 }
 
-foreach ($expectedLibrary in @($runtimeLibrary, $nodeHelper, $editorLibrary)) {
+$expectedLibraries = @($runtimeLibrary, $editorLibrary)
+if ($env:GODE_LITE -ne "ON") { $expectedLibraries += $nodeHelper }
+foreach ($expectedLibrary in $expectedLibraries) {
 	if (-not (Test-Path $expectedLibrary)) {
 		throw "Build finished, but expected Gode binary was not found: $expectedLibrary"
 	}

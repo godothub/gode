@@ -1,0 +1,5 @@
+#pragma once
+
+// Generated per build; the default Gode installation remains addons/gode.
+#define GODE_ADDON_RES_PATH "res://addons/@GODE_ADDON_NAME@/"
+#define GODE_ADDON_REL_PATH "addons/@GODE_ADDON_NAME@/"

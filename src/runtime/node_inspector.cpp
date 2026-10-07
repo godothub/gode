@@ -1,3 +1,4 @@
+#include "runtime/addon_paths.h"
 #include "runtime/node_inspector.h"
 
 #include "runtime/node_runtime.h"
@@ -16,7 +17,7 @@ namespace gode::node_inspector {
 namespace {
 
 constexpr const char *PROJECT_GODE_CONFIG_PATH = "res://gode.json";
-constexpr const char *DEFAULT_GODE_CONFIG_PATH = "res://addons/gode/config/gode.json";
+constexpr const char *DEFAULT_GODE_CONFIG_PATH = GODE_ADDON_RES_PATH "config/gode.json";
 constexpr const char *DEFAULT_INSPECTOR_HOST = "127.0.0.1";
 constexpr int64_t DEFAULT_INSPECTOR_PORT = 9229;
 constexpr int64_t DEFAULT_INSPECTOR_MAX_PORT_RETRIES = 20;

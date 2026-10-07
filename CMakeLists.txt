@@ -21,6 +21,19 @@ option(GODE_RUN_CODEGEN "Run the Python binding generator at configure time" ON)
 option(GODE_USE_COMPILER_CACHE "Use sccache or ccache as the C/C++ compiler launcher when available" ON)
 option(GODE_UNITY_GENERATED_BINDINGS "Build generated binding sources in CMake unity batches" ON)
 option(GODE_BUILD_EDITOR_EXTENSION "Build the desktop editor-only Gode extension" ON)
+set(_GODE_LITE_DEFAULT OFF)
+if(DEFINED ENV{GODE_LITE})
+  set(_GODE_LITE_DEFAULT "$ENV{GODE_LITE}")
+endif()
+option(GODE_LITE "Build godot-js with the reduced Node-compatible JS runtime" ${_GODE_LITE_DEFAULT})
+if(GODE_LITE)
+  set(GODE_ADDON_NAME "godot-js")
+else()
+  set(GODE_ADDON_NAME "gode")
+endif()
+configure_file(include/runtime/addon_paths.h.in generated-config/runtime/addon_paths.h @ONLY)
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/generated-config")
+
 option(GODE_BUILD_NODE_HELPER "Build the desktop Node-compatible helper executable used by child_process.fork" ON)
 
 set(GODOT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/godot-cpp" CACHE PATH "Path to godot-cpp")
@@ -29,6 +42,7 @@ set(TREE_SITTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/tree-sitter" CACHE PATH "
 set(TREE_SITTER_TYPESCRIPT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/tree-sitter-typescript" CACHE PATH "Path to tree-sitter-typescript")
 set(GODE_EXTENSION_API_JSON "" CACHE FILEPATH "extension_api.json used by the Gode binding generator")
 set(GODE_UNITY_GENERATED_BATCH_SIZE "8" CACHE STRING "Number of generated binding sources per unity batch")
+set(GODE_LIBNODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libnode" CACHE PATH "Directory containing the packaged libnode libraries and headers")
 set(GODE_TARGET_ARCH "" CACHE STRING "Target architecture override: x64, arm64")
 
 if(NOT GODE_UNITY_GENERATED_BATCH_SIZE MATCHES "^[1-9][0-9]*$")
@@ -183,7 +197,12 @@ target_include_directories(gode_tree_sitter_typescript PRIVATE
 	"${TREE_SITTER_TYPESCRIPT_DIR}/typescript/src"
 )
 
-if(WIN32)
+if(EMSCRIPTEN)
+	if(NOT GODE_LITE)
+		message(FATAL_ERROR "Web exports require GODE_LITE=ON")
+	endif()
+	set(GODE_PLATFORM "web")
+elseif(WIN32)
 	set(GODE_PLATFORM "windows")
 elseif(ANDROID)
 	set(GODE_PLATFORM "android")
@@ -195,7 +214,9 @@ else()
 	set(GODE_PLATFORM "linux")
 endif()
 
-if(GODE_TARGET_ARCH)
+if(EMSCRIPTEN)
+	set(GODE_ARCH "wasm32")
+elseif(GODE_TARGET_ARCH)
 	set(GODE_ARCH "${GODE_TARGET_ARCH}")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
 	set(GODE_ARCH "arm64")
@@ -205,21 +226,24 @@ endif()
 
 add_library(gode_libnode STATIC IMPORTED GLOBAL)
 if(GODE_PLATFORM STREQUAL "windows")
-	set(GODE_LIBNODE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libnode/windows/${GODE_ARCH}/libnode.lib")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/windows/${GODE_ARCH}/libnode.lib")
 	set(GODE_LIBNODE_LINK_ITEMS)
 	set(GODE_LIBNODE_LINK_OPTIONS "/WHOLEARCHIVE:${GODE_LIBNODE_FILE}")
 	set(GODE_LIBNODE_SYSTEM_LIBS Dbghelp Psapi Winmm Ws2_32 Advapi32 Crypt32 Ole32 Iphlpapi Shell32 User32 Userenv Uuid)
+elseif(GODE_PLATFORM STREQUAL "web")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/web/${GODE_ARCH}/libnode.a")
+	set(GODE_LIBNODE_SYSTEM_LIBS)
 elseif(GODE_PLATFORM STREQUAL "linux")
-	set(GODE_LIBNODE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libnode/linux/${GODE_ARCH}/libnode.a")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/linux/${GODE_ARCH}/libnode.a")
 	set(GODE_LIBNODE_SYSTEM_LIBS dl pthread rt)
 elseif(GODE_PLATFORM STREQUAL "macos")
-	set(GODE_LIBNODE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libnode/macos/${GODE_ARCH}/libnode.a")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/macos/${GODE_ARCH}/libnode.a")
 	set(GODE_LIBNODE_SYSTEM_LIBS "-framework CoreFoundation" "-framework Security")
 elseif(GODE_PLATFORM STREQUAL "android")
-	set(GODE_LIBNODE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libnode/android/${GODE_ARCH}/libnode.a")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/android/${GODE_ARCH}/libnode.a")
 	set(GODE_LIBNODE_SYSTEM_LIBS log dl)
 elseif(GODE_PLATFORM STREQUAL "ios")
-	set(GODE_LIBNODE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libnode/ios/${GODE_ARCH}/libnode.a")
+	set(GODE_LIBNODE_FILE "${GODE_LIBNODE_DIR}/ios/${GODE_ARCH}/libnode.a")
 	set(GODE_LIBNODE_SYSTEM_LIBS "-framework Foundation")
 else()
 	message(FATAL_ERROR "Unsupported Gode platform: ${GODE_PLATFORM}")
@@ -228,16 +252,39 @@ endif()
 if(NOT EXISTS "${GODE_LIBNODE_FILE}")
 	message(FATAL_ERROR "libnode binary was not found: ${GODE_LIBNODE_FILE}")
 endif()
-if(APPLE)
+get_filename_component(_GODE_LIBNODE_PLATFORM_DIR "${GODE_LIBNODE_FILE}" DIRECTORY)
+set(_GODE_LIBNODE_PROFILE_FILE "${_GODE_LIBNODE_PLATFORM_DIR}/LIBRARY-PROFILE.json")
+if(GODE_LITE AND NOT EXISTS "${_GODE_LIBNODE_PROFILE_FILE}")
+	message(FATAL_ERROR "godot-js requires libnode-lite with LIBRARY-PROFILE.json: ${_GODE_LIBNODE_PROFILE_FILE}")
+endif()
+if(EXISTS "${_GODE_LIBNODE_PROFILE_FILE}")
+	file(READ "${_GODE_LIBNODE_PROFILE_FILE}" _GODE_LIBNODE_PROFILE_JSON)
+	string(JSON _GODE_LIBNODE_PROFILE GET "${_GODE_LIBNODE_PROFILE_JSON}" profile)
+	set(_GODE_LIBNODE_EXPECTED_PROFILE libnode)
+	if(GODE_LITE)
+		set(_GODE_LIBNODE_EXPECTED_PROFILE libnode-lite)
+	endif()
+	if(NOT _GODE_LIBNODE_PROFILE STREQUAL _GODE_LIBNODE_EXPECTED_PROFILE)
+		message(FATAL_ERROR "${GODE_ADDON_NAME} requires ${_GODE_LIBNODE_EXPECTED_PROFILE}; found ${_GODE_LIBNODE_PROFILE}")
+	endif()
+endif()
+if(GODE_LITE)
+	set(GODE_LIBNODE_LINK_ITEMS "${GODE_LIBNODE_FILE}")
+	set(GODE_LIBNODE_LINK_OPTIONS)
+elseif(APPLE)
 	set(GODE_LIBNODE_LINK_ITEMS "-Wl,-force_load,${GODE_LIBNODE_FILE}")
 	set(GODE_LIBNODE_LINK_OPTIONS)
 elseif(NOT WIN32)
 	set(GODE_LIBNODE_LINK_ITEMS "-Wl,--whole-archive" "${GODE_LIBNODE_FILE}" "-Wl,--no-whole-archive")
 	set(GODE_LIBNODE_LINK_OPTIONS)
 endif()
+set(GODE_LIBNODE_INCLUDE_DIR "${GODE_LIBNODE_DIR}/include")
+if(GODE_PLATFORM STREQUAL "web")
+	set(GODE_LIBNODE_INCLUDE_DIR "${_GODE_LIBNODE_PLATFORM_DIR}/include")
+endif()
 set_target_properties(gode_libnode PROPERTIES
 	IMPORTED_LOCATION "${GODE_LIBNODE_FILE}"
-	INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/libnode/include"
+	INTERFACE_INCLUDE_DIRECTORIES "${GODE_LIBNODE_INCLUDE_DIR}"
 )
 
 file(GLOB_RECURSE GODE_MANUAL_SOURCES CONFIGURE_DEPENDS
@@ -268,14 +315,19 @@ list(REMOVE_ITEM GODE_RUNTIME_SOURCES
 )
 list(APPEND GODE_RUNTIME_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/register_runtime_types.cpp")
 
-set(GODE_RUNTIME_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/example/addons/gode/binary/${GODE_PLATFORM}/${GODE_ARCH}")
-set(GODE_EDITOR_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/example/addons/gode/binary/editor/${GODE_PLATFORM}/${GODE_ARCH}")
+if(GODE_LITE)
+  set(GODE_ADDON_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third/godot-js/addons/godot-js")
+else()
+  set(GODE_ADDON_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/example/addons/gode")
+endif()
+set(GODE_RUNTIME_OUTPUT_DIR "${GODE_ADDON_OUTPUT_DIR}/binary/${GODE_PLATFORM}/${GODE_ARCH}")
+set(GODE_EDITOR_OUTPUT_DIR "${GODE_ADDON_OUTPUT_DIR}/binary/editor/${GODE_PLATFORM}/${GODE_ARCH}")
 set(GODE_BUILD_EDITOR_EXTENSION_EFFECTIVE OFF)
 if(GODE_BUILD_EDITOR_EXTENSION AND (GODE_PLATFORM STREQUAL "windows" OR GODE_PLATFORM STREQUAL "linux" OR GODE_PLATFORM STREQUAL "macos"))
 	set(GODE_BUILD_EDITOR_EXTENSION_EFFECTIVE ON)
 endif()
 set(GODE_BUILD_NODE_HELPER_EFFECTIVE OFF)
-if(GODE_BUILD_NODE_HELPER AND (GODE_PLATFORM STREQUAL "windows" OR GODE_PLATFORM STREQUAL "linux" OR GODE_PLATFORM STREQUAL "macos"))
+if(GODE_BUILD_NODE_HELPER AND NOT GODE_LITE AND (GODE_PLATFORM STREQUAL "windows" OR GODE_PLATFORM STREQUAL "linux" OR GODE_PLATFORM STREQUAL "macos"))
 	set(GODE_BUILD_NODE_HELPER_EFFECTIVE ON)
 endif()
 if(GODE_BUILD_NODE_HELPER_EFFECTIVE)
@@ -330,7 +382,7 @@ target_include_directories(gode_runtime PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}/src"
 	"${NODE_ADDON_API_DIR}"
 	"${TREE_SITTER_DIR}/lib/include"
-	"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include"
+	"${GODE_LIBNODE_INCLUDE_DIR}"
 )
 target_compile_definitions(gode_runtime PRIVATE
 	NAPI_CPP_EXCEPTIONS
@@ -344,19 +396,41 @@ target_link_libraries(gode_runtime PRIVATE
 	${GODE_LIBNODE_SYSTEM_LIBS}
 )
 target_link_options(gode_runtime PRIVATE ${GODE_LIBNODE_LINK_OPTIONS})
+if(GODE_LITE)
+  target_compile_definitions(gode_runtime PRIVATE GODE_LITE=1)
+  if(EMSCRIPTEN)
+    target_compile_options(gode_tree_sitter PRIVATE -pthread)
+    target_compile_options(gode_tree_sitter_typescript PRIVATE -pthread)
+    set_target_properties(gode_runtime PROPERTIES SUFFIX ".wasm")
+    target_compile_options(gode_runtime PRIVATE -pthread -fwasm-exceptions
+      -fvisibility=hidden -fvisibility-inlines-hidden)
+    target_compile_definitions(gode_runtime PRIVATE V8_TARGET_ARCH_ARM=1)
+    target_link_options(gode_runtime PRIVATE
+      -pthread -fwasm-exceptions -sSIDE_MODULE=2
+      -Wl,--Bsymbolic
+      "-sEXPORTED_FUNCTIONS=['_gode_runtime_library_init']"
+      -sBINARYEN_EXTRA_PASSES=spill-pointers,--coalesce-locals,--dce,--vacuum
+    )
+  elseif(APPLE)
+    target_link_options(gode_runtime PRIVATE "-Wl,-dead_strip" "-Wl,-exported_symbol,_gode_runtime_library_init")
+  elseif(NOT WIN32)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/gode-lite.exports" "{ global: gode_runtime_library_init; local: *; };\n")
+    target_link_options(gode_runtime PRIVATE "-Wl,--gc-sections" "-Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/gode-lite.exports")
+  endif()
+endif()
 set_property(TARGET gode_runtime APPEND PROPERTY LINK_DEPENDS "${GODE_LIBNODE_FILE}")
-if(WIN32)
+if(WIN32 AND NOT GODE_LITE)
 	set(GODE_WINDOWS_NODE_SHIM_DEF "${CMAKE_CURRENT_BINARY_DIR}/gode_node_api_forwarders.def")
 	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/js_native_api.h"
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/node_api.h"
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/node.h"
+		"${GODE_LIBNODE_DIR}/include/js_native_api.h"
+		"${GODE_LIBNODE_DIR}/include/node_api.h"
+		"${GODE_LIBNODE_DIR}/include/node.h"
 	)
 	set(_GODE_NODE_API_FORWARDER_SYMBOLS)
 	foreach(_GODE_NODE_API_HEADER IN ITEMS
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/js_native_api.h"
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/node_api.h"
-		"${CMAKE_CURRENT_SOURCE_DIR}/libnode/include/node.h"
+		"${GODE_LIBNODE_DIR}/include/js_native_api.h"
+		"${GODE_LIBNODE_DIR}/include/node_api.h"
+		"${GODE_LIBNODE_DIR}/include/node.h"
 	)
 		file(READ "${_GODE_NODE_API_HEADER}" _GODE_NODE_API_HEADER_TEXT)
 		string(REGEX MATCHALL [[(napi|node_api)_[A-Za-z0-9_]+\(]] _GODE_NODE_API_HEADER_MATCHES "${_GODE_NODE_API_HEADER_TEXT}")

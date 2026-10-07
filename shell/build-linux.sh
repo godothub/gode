@@ -76,11 +76,14 @@ esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 build_root="$repo_root/build"
+if [ "${GODE_LITE:-OFF}" = ON ]; then build_root="$build_root/godot-js"; fi
 build_dir="$build_root/linux/$architecture/$config_dir"
-bin_dir="$repo_root/example/addons/gode/binary/linux/$architecture"
+addon_root="$repo_root/example/addons/gode"
+if [ "${GODE_LITE:-OFF}" = ON ]; then addon_root="$repo_root/third/godot-js/addons/godot-js"; fi
+bin_dir="$addon_root/binary/linux/$architecture"
 runtime_library="$bin_dir/libgode_runtime.so"
 node_helper="$bin_dir/gode_node"
-editor_library="$repo_root/example/addons/gode/binary/editor/linux/$architecture/libgode_editor.so"
+editor_library="$addon_root/binary/editor/linux/$architecture/libgode_editor.so"
 libnode_library="$repo_root/libnode/linux/$architecture/libnode.a"
 
 if [ -z "$python_executable" ]; then
@@ -142,17 +145,22 @@ cmake \
 	-DCMAKE_BUILD_TYPE="$configuration" \
 	-DPython3_EXECUTABLE="$python_executable" \
 	-DGODE_RUN_CODEGEN="$codegen" \
+	-DGODE_LITE="${GODE_LITE:-OFF}" \
 	-DGODE_TARGET_ARCH="$architecture" \
 	-DGODOTCPP_TARGET="$godotcpp_target"
 
 printf 'Building gode (%s, linux/%s)...\n' "$configuration" "$architecture"
 cmake --build "$build_dir" --target gode --config "$configuration" --parallel "$jobs"
 
-for expected_library in "$runtime_library" "$node_helper" "$editor_library"; do
+for expected_library in "$runtime_library" "$editor_library"; do
 	if [ ! -f "$expected_library" ]; then
 		printf 'Build finished, but expected Gode binary was not found: %s\n' "$expected_library" >&2
 		exit 1
 	fi
 done
 
-printf 'Built Gode binaries:\n  %s\n  %s\n  %s\n' "$runtime_library" "$node_helper" "$editor_library"
+if [ "${GODE_LITE:-OFF}" != ON ] && [ ! -f "$node_helper" ]; then
+    printf 'Missing Node helper: %s\n' "$node_helper" >&2; exit 1
+fi
+
+printf 'Built Gode binaries:\n  %s\n  %s\n' "$runtime_library" "$editor_library"

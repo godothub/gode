@@ -89,8 +89,11 @@ esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 build_root="$repo_root/build"
+if [ "${GODE_LITE:-OFF}" = ON ]; then build_root="$build_root/godot-js"; fi
 build_dir="$build_root/android/$architecture/$config_dir"
-bin_dir="$repo_root/example/addons/gode/binary/android/$architecture"
+addon_root="$repo_root/example/addons/gode"
+if [ "${GODE_LITE:-OFF}" = ON ]; then addon_root="$repo_root/third/godot-js/addons/godot-js"; fi
+bin_dir="$addon_root/binary/android/$architecture"
 expected_library="$bin_dir/libgode_runtime.so"
 libnode_library="$repo_root/libnode/android/$architecture/libnode.a"
 
@@ -292,6 +295,7 @@ cmake \
 	-DANDROID_STL=c++_shared \
 	-DPython3_EXECUTABLE="$python_executable" \
 	-DGODE_RUN_CODEGEN="$codegen" \
+	-DGODE_LITE="${GODE_LITE:-OFF}" \
 	-DGODE_TARGET_ARCH="$architecture" \
 	-DGODOTCPP_TARGET="$godotcpp_target"
 

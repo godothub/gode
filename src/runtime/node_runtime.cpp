@@ -57,6 +57,9 @@ void NodeRuntime::init_once() {
 	}
 
 	node_inspector::Config inspector_config = node_inspector::load_config();
+#ifdef GODE_LITE
+	inspector_config.enabled = false;
+#endif
 
 	std::vector<std::string> args;
 	std::vector<std::string> exec_args;

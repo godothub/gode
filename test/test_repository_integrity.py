@@ -363,7 +363,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		self.assertIn("gode.globalize_path", bootstrap_source)
 		self.assertIn("global.__gode_real_path_for_virtual_path", bootstrap_source)
 		self.assertIn("__gode_strip_virtual_generation", bootstrap_source)
-		self.assertIn("crypto.createHash('sha256')", bootstrap_source)
+		self.assertIn("gode.sha256_text(manifest)", bootstrap_source)
 		self.assertIn("__gode_exported_npm_manifest_fingerprint", bootstrap_source)
 		self.assertIn("__gode_materialize_node_modules_tree", bootstrap_source)
 		self.assertIn("__gode_node_modules_tree_marker_path", bootstrap_source)
@@ -1583,8 +1583,8 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		runtime_bridge_source = (ROOT / "src/runtime/gode_runtime_bridge.cpp").read_text(encoding="utf-8")
 		register_source = (ROOT / "src/register_editor_types.cpp").read_text(encoding="utf-8")
 		self.assertIn('PROJECT_TYPESCRIPT_CONFIG_PATH = "res://tsconfig.json"', compiler_source)
-		self.assertIn('DEFAULT_TYPESCRIPT_CONFIG_PATH = "res://addons/gode/config/tsconfig.json"', compiler_source)
-		self.assertIn('TYPESCRIPT_COMPILER_BRIDGE_PATH = "res://addons/gode/runtime/typescript_compiler.js"', compiler_source)
+		self.assertIn('DEFAULT_TYPESCRIPT_CONFIG_PATH = GODE_ADDON_RES_PATH "config/tsconfig.json"', compiler_source)
+		self.assertIn('TYPESCRIPT_COMPILER_BRIDGE_PATH = GODE_ADDON_RES_PATH "runtime/typescript_compiler.js"', compiler_source)
 		self.assertIn("ensure_project_typescript_config", compiler_source)
 		self.assertIn("make_error_diagnostic", compiler_source)
 		self.assertIn("Failed to read TypeScript source", compiler_source)
@@ -2188,7 +2188,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
 		compiler_source = (EXAMPLE_ROOT / "addons/gode/runtime/typescript_compiler.js").read_text(encoding="utf-8")
 		for token in (
 			'PROJECT_GODE_CONFIG_PATH = "res://gode.json"',
-			'DEFAULT_GODE_CONFIG_PATH = "res://addons/gode/config/gode.json"',
+			'DEFAULT_GODE_CONFIG_PATH = GODE_ADDON_RES_PATH "config/gode.json"',
 			"Config load_config",
 			"debug.inspector",
 			"allowInRelease",

@@ -1,3 +1,4 @@
+#include "runtime/addon_paths.h"
 #include "compiler/typescript_project_compiler.h"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -18,12 +19,12 @@ using namespace godot;
 namespace gode {
 namespace {
 
-constexpr const char *TYPESCRIPT_COMPILER_BRIDGE_PATH = "res://addons/gode/runtime/typescript_compiler.js";
-constexpr const char *TYPESCRIPT_RUNTIME_PATH = "res://addons/gode/tsc/lib/typescript.js";
+constexpr const char *TYPESCRIPT_COMPILER_BRIDGE_PATH = GODE_ADDON_RES_PATH "runtime/typescript_compiler.js";
+constexpr const char *TYPESCRIPT_RUNTIME_PATH = GODE_ADDON_RES_PATH "tsc/lib/typescript.js";
 constexpr const char *PROJECT_TYPESCRIPT_CONFIG_PATH = "res://tsconfig.json";
-constexpr const char *DEFAULT_TYPESCRIPT_CONFIG_PATH = "res://addons/gode/config/tsconfig.json";
-constexpr const char *GODE_GLOBAL_TYPES_PATH = "res://addons/gode/types/globals.d.ts";
-constexpr const char *GODE_MODULE_TYPES_PATH = "res://addons/gode/types/godot.d.ts";
+constexpr const char *DEFAULT_TYPESCRIPT_CONFIG_PATH = GODE_ADDON_RES_PATH "config/tsconfig.json";
+constexpr const char *GODE_GLOBAL_TYPES_PATH = GODE_ADDON_RES_PATH "types/globals.d.ts";
+constexpr const char *GODE_MODULE_TYPES_PATH = GODE_ADDON_RES_PATH "types/godot.d.ts";
 constexpr const char *TYPESCRIPT_BUILD_ROOT = "res://.gode/build/typescript";
 constexpr const char *GODE_RUNTIME_BRIDGE_CLASS = "GodeRuntimeBridge";
 constexpr uint64_t FNV1A_64_OFFSET_BASIS = 14695981039346656037ULL;
@@ -160,8 +161,8 @@ bool should_skip_directory(const String &directory_path) {
 		".godot",
 		".gode",
 		"node_modules",
-		"addons/gode/tsc",
-		"addons/gode/types"
+		GODE_ADDON_REL_PATH "tsc",
+		GODE_ADDON_REL_PATH "types"
 	};
 
 	for (const char *prefix : skipped_prefixes) {
