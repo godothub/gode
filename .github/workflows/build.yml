@@ -23,7 +23,7 @@ permissions:
 env:
   PYTHON_VERSION: "3.14"
   GODOT_VERSION: "4.7-stable"
-  LIBNODE_URL: "https://github.com/moluopro/libnode/releases/download/24.18.0/libnode.zip"
+  LIBNODE_URL: "https://github.com/moluopro/libnode/releases/download/24.21.0/libnode.zip"
 
 jobs:
   build:

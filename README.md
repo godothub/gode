@@ -306,3 +306,41 @@ export default class LevelLoader extends Node {
 ## Featured Demos
 
 - [tps-demo-ts](https://github.com/godothub/gode-tps-demo): TypeScript version of the official tps-demo sample
+
+
+## godot-js Lite 构建
+
+完整 Gode 使用 `libnode.zip`，保持 Node/npm 和原生扩展支持。设置
+`GODE_LITE=ON` 使用同一套源码构建 godot-js，依赖同版本的
+`libnode-lite.zip`；构建目录和二进制输出与完整 Gode 分开。
+
+```sh
+.github/shell/prepare-libnode.sh \
+  --url https://github.com/moluopro/libnode/releases/download/24.21.0/libnode-lite.zip \
+  --force
+GODE_LITE=ON shell/build-macos.sh --config Release
+python3 .github/shell/sync-godot-js.py
+.github/shell/package-plugin.sh --variant godot-js
+```
+
+Lite 二进制写入 `third/godot-js/addons/godot-js/binary`，完整版本仍写入
+`example/addons/gode/binary`。新包沿用库名及 JS/Godot 类接口；Lite
+不提供原生 `.node` 插件、子进程助手、Worker、Inspector、ICU/Intl、
+OpenSSL/crypto/TLS、SQLite 和 V8 WebAssembly API。纯 JS npm 包若
+依赖这些系统功能，仍不能在 Lite 使用。同一项目只安装其中一个插件。
+
+`godot-js` 子模块只保留插件分发文件和 Lite 打包流水线，实际实现
+统一在 Gode 维护。更新 `example/addons/gode` 后运行同步脚本即可。
+该子模块的流水线从 Gode 的指定 ref 构建五个原生平台和 Web wasm32，
+打包 `godot-js.zip`，并验证原生及浏览器导出。
+
+Web 构建使用 `shell/build-web.sh` 和 `libnode-lite.zip` 中的
+`web/wasm32/libnode.a`，读取该目标自己的头文件。Web 扩展使用
+Emscripten 5.0.7、pthreads、Wasm 异常和 V8 ARM 模拟器；V8 的
+`WebAssembly` API 仍禁用。完整 Node 配置面向原生平台。
+
+插件包附带匹配的 Godot 4.7 wasm32 导出模板：
+`addons/godot-js/binary/editor/web/godot.web.template_release.wasm32.dlink.zip`。
+Web 预设需要启用线程和 GDExtension，设置上述自定义 Release 模板；
+服务器提供 COOP/COEP 响应头。模板构建脚本及所有 C++ 实现均在
+Gode 维护。
