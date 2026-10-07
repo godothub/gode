@@ -39,6 +39,7 @@ class RegisterGenerator(CodeGenerator):
 
             classes.append({
                 'class_name': class_name,
+                'is_editor': class_def.get('api_type') == 'editor',
                 'snake_name': snake_name,
                 'include': f"classes/{snake_name}_binding.gen.h"
             })

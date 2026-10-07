@@ -160,6 +160,7 @@ std::string commonjs_bootstrap_script() {
 		   "  console.error('[Gode] Injection error:', e);"
 		   "}"
 		   ""
+#ifndef GODE_LITE
 		   "globalThis.__gode_open_inspector = function(port, host, wait, autoIncrementPort, maxPortRetries) {"
 		   "  const inspector = require('inspector');"
 		   "  const startPort = Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 9229;"
@@ -207,6 +208,7 @@ std::string commonjs_bootstrap_script() {
 		   "  }"
 		   "};"
 		   ""
+#endif
 		   "const originalReadFileSync = fs.readFileSync;"
 		   "const originalWriteFileSync = fs.writeFileSync;"
 		   "const originalMkdirSync = fs.mkdirSync;"
@@ -644,7 +646,9 @@ std::string commonjs_bootstrap_script() {
 		   "  };"
 		   "}"
 		   ";"
+#if GODE_EDITOR_BINDINGS
 		   "(function() {"
+		   "  if (!gode.OS || !gode.OS.has_feature('editor')) return;"
 		   "  try {"
 		   "    const compilerPath = '" GODE_ADDON_RES_PATH "runtime/typescript_compiler.js';"
 		   "    const compilerSource = fs.readFileSync(compilerPath, 'utf8');"
@@ -654,6 +658,7 @@ std::string commonjs_bootstrap_script() {
 		   "    globalThis.__gode_typescript_compiler_boot_error = e && (e.stack || e.message) || String(e);"
 		   "  }"
 		   "})()"
+#endif
 		   // Patch child_process.fork for native addon probes. Embedded Node reports the
 		   // Godot executable as process.execPath, so fork() must use Gode's bundled
 		   // Node-compatible helper instead of trying to execute the Godot host.

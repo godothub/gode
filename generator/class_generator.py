@@ -235,6 +235,7 @@ class ClassGenerator(CodeGenerator):
                 'godot_class_name': godot_class_name,
                 'godot_include_name': godot_include_name,
                 'class_name': class_name,
+                'is_editor': class_def.get('api_type') == 'editor',
                 'is_node': is_node,
                 'is_ref_counted': is_ref_counted,
                 'snake_name': snake_name,

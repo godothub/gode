@@ -1,4 +1,8 @@
+{% if is_editor %}
+#if GODE_EDITOR_BINDINGS
+{% endif %}
 #include "{{ header_include }}"
+#include "runtime/class_constants.h"
 #include "runtime/func_utils.h"
 #include "runtime/value_convert.h"
 #include <cmath>
@@ -78,23 +82,32 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     }
     {% endif %}
 
-    // Add constants and enum values to both the constructor and prototype. Singletons
-    // are exported as wrapped instances, so prototype properties make expressions like
-    // ResourceLoader.THREAD_LOAD_LOADED work on singleton objects too.
-    {% for constant in constants %}
-    func.As<Napi::Object>().Set("{{ constant.name }}", gode::godot_result_to_napi(env, {{ constant.value }}));
-    {% endfor %}
-    {% for enum in enums %}
-    {
-        Napi::Object enum_values = Napi::Object::New(env);
-        {% for value in enum["values"] %}
-        enum_values.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
-        enum_values.Set(Napi::Number::New(env, {{ value.value }}), Napi::String::New(env, "{{ value.name }}"));
-        func.As<Napi::Object>().Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
+    {% if constants %}
+    static constexpr ClassConstant constants[] = {
+        {% for constant in constants %}
+        { "{{ constant.name }}", {{ constant.value }} },
         {% endfor %}
-        func.As<Napi::Object>().Set("{{ enum.name }}", enum_values);
-    }
+    };
+    {% endif %}
+    {% for enum in enums %}
+    static constexpr ClassConstant enum_values_{{ loop.index0 }}[] = {
+        {% for value in enum["values"] %}
+        { "{{ value.name }}", {{ value.value }} },
+        {% endfor %}
+    };
     {% endfor %}
+    {% if enums %}
+    static constexpr ClassEnum enums[] = {
+        {% for enum in enums %}
+        { "{{ enum.name }}", enum_values_{{ loop.index0 }}, std::size(enum_values_{{ loop.index0 }}) },
+        {% endfor %}
+    };
+    {% endif %}
+    {% if constants or enums %}
+    install_class_constants(env, func.As<Napi::Object>(),
+            {{ "constants, std::size(constants)" if constants else "nullptr, 0" }},
+            {{ "enums, std::size(enums)" if enums else "nullptr, 0" }});
+    {% endif %}
 
     // Manually attach methods to prototype to avoid InstanceMethod's strict 'this' check
     Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
@@ -140,20 +153,11 @@ Napi::Function {{ class_name }}Binding::get_class_constructor(Napi::Env env) {
     prototype.Set("toString", Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "toString"));
     prototype.Set(Napi::Symbol::For(env, "nodejs.util.inspect.custom"), Napi::Function::New(env, &{{ class_name }}Binding::_to_string, "inspect"));
 
-    {% for constant in constants %}
-    prototype.Set("{{ constant.name }}", gode::godot_result_to_napi(env, {{ constant.value }}));
-    {% endfor %}
-    {% for enum in enums %}
-    {
-        Napi::Object enum_values = Napi::Object::New(env);
-        {% for value in enum["values"] %}
-        enum_values.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
-        enum_values.Set(Napi::Number::New(env, {{ value.value }}), Napi::String::New(env, "{{ value.name }}"));
-        prototype.Set("{{ value.name }}", gode::godot_result_to_napi(env, {{ value.value }}));
-        {% endfor %}
-        prototype.Set("{{ enum.name }}", enum_values);
-    }
-    {% endfor %}
+    {% if constants or enums %}
+    install_class_constants(env, prototype,
+            {{ "constants, std::size(constants)" if constants else "nullptr, 0" }},
+            {{ "enums, std::size(enums)" if enums else "nullptr, 0" }});
+    {% endif %}
 
     {% for method in methods %}
     {% if not method.is_static %}
@@ -381,3 +385,6 @@ Napi::Value {{ class_name }}Binding::{{ method.name_cpp }}(const Napi::CallbackI
 {% endfor %}
 
 } // namespace gode
+{% if is_editor %}
+#endif // GODE_EDITOR_BINDINGS
+{% endif %}

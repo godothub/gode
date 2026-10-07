@@ -6,20 +6,38 @@
 
 // Classes
 {% for item in classes %}
+{% if item.is_editor %}
+#if GODE_EDITOR_BINDINGS
+{% endif %}
 #include "{{ item.include }}"
+{% if item.is_editor %}
+#endif
+{% endif %}
 {% endfor %}
 
 namespace gode {
 
 void register_classes(Napi::Env env, Napi::Object exports) {
+#if GODE_EDITOR_BINDINGS
+    const bool editor = godot::Engine::get_singleton() && godot::Engine::get_singleton()->is_editor_hint();
+#endif
     // Register Classes
     {% for item in classes %}
+    {% if item.is_editor %}
+#if GODE_EDITOR_BINDINGS
+    if (editor) {
+    {% endif %}
     {{ item.class_name }}Binding::init(env, exports);
+    {% if item.is_editor %}
+    }
+#endif
+    {% endif %}
     {% endfor %}
 
     // Register Singletons
     {% for singleton in singletons %}
     {% if singleton.name == "EditorInterface" %}
+#if GODE_EDITOR_BINDINGS
     if (godot::Engine::get_singleton() && godot::Engine::get_singleton()->is_editor_hint()) {
     {% endif %}
     {
@@ -36,6 +54,7 @@ void register_classes(Napi::Env env, Napi::Object exports) {
     }
     {% if singleton.name == "EditorInterface" %}
     }
+#endif
     {% endif %}
     {% endfor %}
 
@@ -43,9 +62,15 @@ void register_classes(Napi::Env env, Napi::Object exports) {
 
 void reset_class_references() {
     {% for item in classes %}
+    {% if item.is_editor %}
+#if GODE_EDITOR_BINDINGS
+    {% endif %}
     if (!{{ item.class_name }}Binding::constructor.IsEmpty()) {
         {{ item.class_name }}Binding::constructor.Reset();
     }
+    {% if item.is_editor %}
+#endif
+    {% endif %}
     {% endfor %}
 }
 
