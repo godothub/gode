@@ -3,15 +3,20 @@ set -euo pipefail
 
 output_directory=""
 skip_binary_validation=0
+variant=gode
 
 usage() {
-	printf 'Usage: %s [--output-directory DIR] [--skip-binary-validation]\n' "$0"
+	printf 'Usage: %s [--output-directory DIR] [--skip-binary-validation] [--variant gode|godot-js]\n' "$0"
 }
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--output-directory)
 			output_directory="${2:?missing value for --output-directory}"
+			shift 2
+			;;
+		--variant)
+			variant="${2:?missing variant}"
 			shift 2
 			;;
 		--skip-binary-validation)
@@ -37,10 +42,11 @@ if [ -z "$output_directory" ]; then
 	output_directory="$repo_root/dist"
 fi
 
+case "$variant" in gode|godot-js) ;; *) printf 'Unknown variant: %s\n' "$variant" >&2; exit 2 ;; esac
 addon_root="$repo_root/example/addons/gode"
 staging_root="$repo_root/build/package-staging"
-staged_addon_root="$staging_root/gode"
-archive_name="gode.zip"
+staged_addon_root="$staging_root/$variant"
+archive_name="$variant.zip"
 archive_path="$output_directory/$archive_name"
 
 required_files=(
@@ -59,6 +65,8 @@ required_files=(
 	"types/globals.d.ts"
 	"types/godot.d.ts"
 )
+binary_root="$addon_root"
+if [ "$variant" = godot-js ]; then binary_root="$repo_root/third/godot-js/addons/godot-js"; fi
 required_binaries=(
 	"binary/windows/x64/libgode_runtime.dll"
 	"binary/windows/x64/node.dll"
@@ -81,9 +89,19 @@ for file in "${required_files[@]}"; do
 	fi
 done
 
+if [ "$variant" = godot-js ]; then
+    lite_binaries=()
+    for file in "${required_binaries[@]}"; do
+        case "$file" in */gode_node|*/gode_node.exe|*/node.dll) ;; *) lite_binaries+=("$file") ;; esac
+    done
+    required_binaries=("${lite_binaries[@]}"
+        "binary/web/wasm32/libgode_runtime.wasm"
+        "binary/editor/web/godot.web.template_release.wasm32.dlink.zip")
+fi
+
 if [ "$skip_binary_validation" -eq 0 ]; then
 	for file in "${required_binaries[@]}"; do
-		if [ ! -f "$addon_root/$file" ]; then
+		if [ ! -f "$binary_root/$file" ]; then
 			printf 'Missing built plugin binary: %s\n' "$file" >&2
 			exit 1
 		fi
@@ -93,6 +111,13 @@ fi
 rm -rf "$staging_root"
 mkdir -p "$staged_addon_root" "$output_directory"
 cp -R "$addon_root"/. "$staged_addon_root"/
+if [ "$variant" = godot-js ]; then
+    rm -rf "$staged_addon_root/binary"
+    cp -R "$binary_root/binary" "$staged_addon_root/binary"
+    python3 "$script_dir/sync-godot-js.py" --output "$staged_addon_root"
+    rm -f "$staged_addon_root/gode.gd" "$staged_addon_root/gode.gd.uid"
+    find "$staged_addon_root/binary" -type f \( -name gode_node -o -name gode_node.exe -o -name node.dll \) -delete
+fi
 find "$staged_addon_root" -type f -name '*.import' -delete
 
 "$script_dir/prepare-typescript.sh" --output-directory "$staged_addon_root/tsc"
@@ -116,7 +141,7 @@ find "$staged_addon_root/binary" -type f \( -name 'libgode.dll' -o -name 'libgod
 rm -f "$archive_path"
 (
 	cd "$staging_root"
-	zip -qr "$archive_path" gode
+	zip -qr "$archive_path" "$variant"
 )
 
 printf 'Packaged plugin:\n  %s\n' "$archive_path"

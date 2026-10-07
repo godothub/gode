@@ -1,6 +1,8 @@
 @tool
 extends EditorExportPlugin
 
+const LITE_RUNTIME := false
+
 const GODE_CONFIG_PATH := "res://gode.json"
 const DEFAULT_GODE_CONFIG_PATH := "res://addons/gode/config/gode.json"
 const INLINE_SOURCE_MAP_MARKER := "//# sourceMappingURL=data:application/json;base64,"
@@ -371,6 +373,8 @@ func _add_macos_native_probe_helper(helper_path: String) -> bool:
 	return true
 
 func _target_native_probe_helper_path(features: PackedStringArray) -> String:
+	if LITE_RUNTIME:
+		return ""
 	if _features_has(features, "windows") and (_features_has(features, "x86_64") or _features_has(features, "x64")):
 		return "res://addons/gode/binary/windows/x64/gode_node.exe"
 	if _features_has(features, "linux") and (_features_has(features, "x86_64") or _features_has(features, "x64")):
@@ -381,10 +385,10 @@ func _target_native_probe_helper_path(features: PackedStringArray) -> String:
 
 func _target_runtime_binary_paths(features: PackedStringArray) -> PackedStringArray:
 	if _features_has(features, "windows") and (_features_has(features, "x86_64") or _features_has(features, "x64")):
-		return PackedStringArray([
-			"res://addons/gode/binary/windows/x64/libgode_runtime.dll",
-			"res://addons/gode/binary/windows/x64/node.dll",
-		])
+		var paths := PackedStringArray(["res://addons/gode/binary/windows/x64/libgode_runtime.dll"])
+		if not LITE_RUNTIME:
+			paths.append("res://addons/gode/binary/windows/x64/node.dll")
+		return paths
 	if _features_has(features, "linux") and (_features_has(features, "x86_64") or _features_has(features, "x64")):
 		return PackedStringArray([
 			"res://addons/gode/binary/linux/x64/libgode_runtime.so",
