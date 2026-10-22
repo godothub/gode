@@ -64,6 +64,7 @@ public:
 	bool compile() const;
 	godot::Error reload_source_code(const godot::String &p_code, bool p_keep_state, bool p_force_dirty = false);
 	void release_runtime_state();
+	void cache_constructed_class(const Napi::Function &p_class);
 	bool has_static_method(const godot::StringName &p_method) const;
 	int32_t get_static_method_argument_count(const godot::StringName &p_method) const;
 	godot::Variant call_static(const godot::Variant **p_args, GDExtensionInt p_argcount, GDExtensionCallError &r_error);

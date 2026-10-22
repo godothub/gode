@@ -9,6 +9,12 @@ JavaScript/TypeScript scripting support for the Godot engine, running on all nat
 | Supported | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Minimum Version | 10 | 9 | 10.15 | 16 | Ubuntu 22 |
 
+For a lightweight alternative, try [Godot-JS](https://github.com/godothub/godot-js/releases), based on Gode:
+
+1. Removes much of Node.js while retaining the V8 engine.
+2. Lets you write scripts the same way as with Gode.
+3. Supports more platforms, including Web.
+
 ## Quick Start
 
 ### 1. Install the Plugin

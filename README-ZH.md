@@ -9,6 +9,11 @@ Godot 引擎的 JavaScript/TypeScript 脚本支持，运行在所有原生平台
 | 支持情况 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 最低版本 | 10 | 9 | 10.15 | 16 | Ubuntu 22 |
 
+如果需要轻量级方案，请尝试基于 Gode 的 [Godot-JS](https://github.com/godothub/godot-js/releases)：
+1. 裁剪了大量 NodeJS 内容，保留 V8 引擎。
+2. 与 Gode 完全一致的代码编写方式。
+3. 支持更多平台，比如 Web。
+
 ## 快速入门
 
 ### 1. 安装插件

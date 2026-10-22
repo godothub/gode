@@ -8,6 +8,7 @@
 #include <v8-locker.h>
 #include <exception>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -140,6 +141,18 @@ ScriptInstance::ScriptInstance(const Ref<TypeScriptScript> &p_script, Object *p_
 			return;
 		}
 
+		Napi::Object existing = consume_script_instance_object(owner);
+		if (!existing.IsEmpty()) {
+			register_script_signals();
+			if (!bind_script_signals_to_instance(existing, "JS Resource adoption")) {
+				return;
+			}
+			// The wrapper owns the initial native reference. Keep a weak JS
+			// reference until another Godot owner retains the Resource.
+			retain_js_instance(existing);
+			return;
+		}
+
 		// This can compile TypeScript; keep it outside the instance V8 scope to avoid lock inversion.
 		if (!script->ensure_default_class_loaded()) {
 			return;
@@ -185,8 +198,38 @@ ScriptInstance::ScriptInstance(const Ref<TypeScriptScript> &p_script, Object *p_
 		// Register signals before creating the runtime module instance.
 		register_script_signals();
 
-		js_instance = Napi::Persistent(instance);
+		retain_js_instance(instance);
 	}
+}
+
+void ScriptInstance::retain_js_instance(const Napi::Object &p_instance) {
+	if (Object::cast_to<RefCounted>(owner)) {
+		js_instance = Napi::Weak(p_instance);
+		js_reference_strong = false;
+		update_js_reference();
+	} else {
+		js_instance = Napi::Persistent(p_instance);
+	}
+}
+
+void ScriptInstance::update_js_reference() {
+	if (js_instance.IsEmpty() || !NodeRuntime::is_running()) {
+		return;
+	}
+	auto *ref = Object::cast_to<RefCounted>(owner);
+	const bool strong = ref && ref->get_reference_count() > 1;
+	if (strong == js_reference_strong) {
+		return;
+	}
+	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	Napi::HandleScope scope(js_instance.Env());
+	if (strong) {
+		js_instance.Ref();
+	} else {
+		js_instance.Unref();
+	}
+	js_reference_strong = strong;
 }
 
 ScriptInstance::~ScriptInstance() {
@@ -358,7 +401,7 @@ void ScriptInstance::reload(bool p_keep_state) {
 		}
 	}
 
-	js_instance = Napi::Persistent(instance);
+	retain_js_instance(instance);
 }
 
 bool ScriptInstance::set(const StringName &p_name, const Variant &p_value) {

@@ -3,8 +3,10 @@ extends Node
 const TEST_FINISHED_SIGNAL := "test_finished"
 const RUN_TEST_METHOD := "run_test"
 const PASS_MARKER := "[GodeTest] all tests passed"
+const RUNTIME_RESOURCE_SCRIPT_PATH := "res://scripts/tests/runtime_resource_lifetime.ts"
 const RUNTIME_NESTED_RESOURCE_PATH := "res://resources/tests/runtime_nested_outer.tres"
 const RUNTIME_NESTED_INNER_PATH := "res://resources/tests/runtime_nested_inner.tres"
+const RUNTIME_RELOAD_SCRIPT_PATH := "res://scripts/tests/runtime_reload_resource.ts"
 
 var tests: Array[Node] = []
 var current_index := -1
@@ -26,7 +28,11 @@ func _ready() -> void:
 func _run_next() -> void:
 	current_index += 1
 	if current_index >= tests.size():
+		if not _verify_resource_script_lifetime():
+			return
 		if not _verify_nested_resource_fixture():
+			return
+		if not _verify_resource_script_reload():
 			return
 		print(PASS_MARKER)
 		get_tree().quit(0)
@@ -151,3 +157,113 @@ func _verify_nested_resource_fixture() -> bool:
 	nested_resource.set_script(null)
 	nested_container.set_script(null)
 	return true
+
+
+func _verify_resource_script_lifetime() -> bool:
+	var resource_script = ResourceLoader.load(RUNTIME_RESOURCE_SCRIPT_PATH)
+	var weak_script = weakref(resource_script)
+	var resource := Resource.new()
+	for iteration in range(2):
+		resource.set_script(resource_script)
+		if resource.get_script() != resource_script:
+			_fail("Engine-created Resource did not keep its script")
+			return false
+		var child_resource = resource.get("child")
+		if not child_resource is Resource or child_resource.get_script() == null:
+			_fail("Resource created in a field initializer did not receive its script")
+			return false
+		if child_resource.get("label") != "field child":
+			_fail("Resource field initializer did not preserve its exported state")
+			return false
+		resource.set_script(null)
+	resource_script = null
+	if weak_script.get_ref() != null:
+		_fail("Detached Resource retained an orphan TypeScript script instance")
+		return false
+	return true
+
+
+func _verify_resource_script_reload() -> bool:
+	var resource_script = ResourceLoader.load(RUNTIME_RELOAD_SCRIPT_PATH)
+	var resources: Array[Resource] = []
+	var children: Array[Resource] = []
+	for index in range(15):
+		var resource := Resource.new()
+		resource.set_script(resource_script)
+		resource.set("label", index + 1)
+		resources.append(resource)
+		var child = resource.get("child")
+		if not child is Resource or child.get_script() != resource_script:
+			_fail("Reload fixture did not adopt its same-class child Resource")
+			return false
+		children.append(child)
+	var constructed: Array = resource_script.call("call_static", "takeConstructed")
+	var initial_count: int = resource_script.call("call_static", "constructionCount")
+	if initial_count != 30:
+		_fail("Reload fixture did not construct exactly 15 parents and 15 children")
+		return false
+	if resource_script.reload(true) != OK:
+		_fail("Resource script reload with state preservation failed")
+		return false
+	constructed.append_array(resource_script.call("call_static", "takeConstructed"))
+	if resource_script.call("call_static", "constructionCount") != initial_count * 3:
+		_fail("Reload included same-class Resources created during its constructors")
+		return false
+	for index in range(resources.size()):
+		if resources[index].get("label") != index + 1 or resources[index].get("child") != children[index]:
+			_fail("Resource reload did not preserve exported state and child identity")
+			return false
+	_detach_reload_resources(constructed)
+	resources.clear()
+	children.clear()
+
+	resource_script.call("call_static", "disableChildren")
+	for index in range(15):
+		var resource := Resource.new()
+		resource.set_script(resource_script)
+		resource.set("label", index + 1)
+		resources.append(resource)
+	constructed = resource_script.call("call_static", "takeConstructed")
+	initial_count = resource_script.call("call_static", "constructionCount")
+	if resource_script.reload(false) != OK:
+		_fail("Resource script reload without state preservation failed")
+		return false
+	constructed.append_array(resource_script.call("call_static", "takeConstructed"))
+	if resource_script.call("call_static", "constructionCount") != initial_count + resources.size():
+		_fail("Resource reload did not reconstruct each existing instance exactly once")
+		return false
+	for resource in resources:
+		if resource.get("label") != 0:
+			_fail("Resource reload(false) preserved an exported value instead of its default")
+			return false
+
+	# The first constructor removes the scripts from all other pending owners.
+	# Reload must resolve each owner's current instance before accessing it.
+	resource_script.call("call_static", "detachOnNextConstruction", resources)
+	initial_count = resource_script.call("call_static", "constructionCount")
+	if resource_script.reload(true) != OK:
+		_fail("Resource script reload with removed pending instances failed")
+		return false
+	constructed.append_array(resource_script.call("call_static", "takeConstructed"))
+	if resource_script.call("call_static", "constructionCount") != initial_count + 1:
+		_fail("Resource reload accessed instances detached by an earlier constructor")
+		return false
+	var attached_count := 0
+	for resource in resources:
+		if resource.get_script() == resource_script:
+			attached_count += 1
+	if attached_count != 1:
+		_fail("Reload fixture did not detach all other pending instances")
+		return false
+	_detach_reload_resources(constructed)
+	return true
+
+
+func _detach_reload_resources(resources: Array) -> void:
+	for resource in resources:
+		if resource.get_script() != null:
+			resource.set("child", null)
+	for resource in resources:
+		if resource.get_script() != null:
+			resource.set_script(null)
+	resources.clear()

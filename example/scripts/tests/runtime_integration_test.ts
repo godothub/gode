@@ -1,3 +1,7 @@
+import RuntimeConstructedResource from "./runtime_constructed_resource.js";
+import RuntimeAssignmentResource from "./runtime_assignment_resource.js";
+import RuntimeExportClauseResource from "./runtime_export_clause_resource.js";
+import RuntimeStaticResource from "./runtime_static_resource.js";
 import nodeAssert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -543,6 +547,78 @@ class RuntimeIntegrationTest extends RuntimeSameFileExportBase {
 			nodeAssert.equal(Number(staticRangeNamespaceProperty.type), VARIANT_TYPE_FLOAT);
 			nodeAssert.equal(Number(staticRangeNamespaceProperty.hint), PROPERTY_HINT_RANGE);
 			nodeAssert.equal(String(staticRangeNamespaceProperty.hint_string), "0,4,1");
+
+			const beforeConstructions = RuntimeConstructedResource.constructions;
+			const directResource = new RuntimeConstructedResource("direct");
+			nodeAssert.equal(RuntimeConstructedResource.constructions, beforeConstructions + 1);
+			assert(directResource.get_script() !== null, "new Resource subclass has no script");
+			nodeAssert.equal(directResource.signal_ready_in_constructor, true, "typed signal was overwritten before the constructor body");
+			let directSignalLabel = "";
+			directResource.typed_completed.connect(label => { directSignalLabel = label; });
+			directResource.typed_completed.emit("direct signal");
+			nodeAssert.equal(directSignalLabel, "direct signal");
+			nodeAssert.equal(directResource.get("label"), "direct");
+			directResource.set("label", "from Godot");
+			nodeAssert.equal(directResource.label, "from Godot");
+			directResource.label = "saved direct";
+			directResource.position = new Vector2(6.5, 12.5);
+			directResource.children = [new RuntimeConstructedResource("nested child")];
+			const directPath = "user://gode_constructed_resource.tres";
+			nodeAssert.equal(ResourceSaver.save(directResource, directPath), GODOT_OK);
+			const restoredDirect = ResourceLoader.load(directPath, "", ResourceLoader.CACHE_MODE_IGNORE) as RuntimeConstructedResource;
+			assert(restoredDirect !== directResource, "round trip reused original Resource");
+			nodeAssert.equal(restoredDirect.get("label"), "saved direct");
+			const restoredPosition = restoredDirect.get("position") as Vector2;
+			nodeAssert.equal(restoredPosition.x, 6.5);
+			nodeAssert.equal(restoredPosition.y, 12.5);
+			const restoredChildren = restoredDirect.get("children") as RuntimeConstructedResource[];
+			nodeAssert.equal(restoredChildren.length, 1);
+			nodeAssert.equal(restoredChildren[0].get("label"), "nested child");
+			let restoredSignalLabel = "";
+			restoredDirect.typed_completed.connect(label => { restoredSignalLabel = label; });
+			restoredDirect.typed_completed.emit("restored signal");
+			nodeAssert.equal(restoredSignalLabel, "restored signal");
+
+			const constructedExports = [
+				{ resource: new RuntimeAssignmentResource(), source: "runtime_assignment_resource.ts", label: "assignment export" },
+				{ resource: new RuntimeExportClauseResource(), source: "runtime_export_clause_resource.ts", label: "export clause" },
+				{ resource: RuntimeStaticResource.singleton, source: "runtime_static_resource.ts", label: "assignment export" },
+				{ resource: RuntimeStaticResource.from_block, source: "runtime_static_resource.ts", label: "assignment export" },
+			];
+			for (const [index, fixture] of constructedExports.entries()) {
+				const script = fixture.resource.get_script() as Resource;
+				assert(script !== null, `constructed ${fixture.source} has no script`);
+				nodeAssert.equal(script.resource_path, `res://scripts/tests/${fixture.source}`);
+				nodeAssert.equal(fixture.resource.get("label"), fixture.label);
+				fixture.resource.label = `saved export ${index}`;
+				const fixturePath = `user://gode_constructed_export_${index}.tres`;
+				nodeAssert.equal(ResourceSaver.save(fixture.resource, fixturePath), GODOT_OK);
+				const restored = ResourceLoader.load(fixturePath, "", ResourceLoader.CACHE_MODE_IGNORE) as Resource;
+				nodeAssert.equal(restored.get("label"), `saved export ${index}`);
+				nodeAssert.equal((restored.get_script() as Resource).resource_path, script.resource_path);
+				if (fixture.resource instanceof RuntimeStaticResource) {
+					nodeAssert.equal(fixture.resource.get("static_label"), "static initialization");
+					nodeAssert.equal(restored.get("static_label"), "static initialization");
+				}
+			}
+
+			const nativeResourceOwner = new GDArray();
+			const adoptedId = (() => {
+				const child = new RuntimeConstructedResource("retained by Godot");
+				nativeResourceOwner.append(child);
+				return child.get_instance_id();
+			})();
+			await waitForEventLoopTurn();
+			forceGarbageCollection();
+			await waitForEventLoopTurn();
+			nodeAssert.equal((nativeResourceOwner.get(0) as Resource).get("label"), "retained by Godot");
+			nativeResourceOwner.clear();
+			await waitForEventLoopTurn();
+			for (let i = 0; i < 3; i++) {
+				forceGarbageCollection();
+				await waitForEventLoopTurn();
+			}
+			nodeAssert.equal(GD.instance_from_id(BigInt.asIntN(64, BigInt(adoptedId))), null, "constructed Resource retained a JS/native reference cycle");
 
 			const exportedResource = new Resource();
 			exportedResource.resource_name = "PersistentRuntimeResource";

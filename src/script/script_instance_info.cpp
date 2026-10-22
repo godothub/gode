@@ -243,22 +243,17 @@ static void script_instance_to_string(GDExtensionScriptInstanceDataPtr p_instanc
 static void script_instance_refcount_incremented(GDExtensionScriptInstanceDataPtr p_instance) {
 	ScriptInstance *instance = cast_instance(p_instance);
 	if (instance) {
-		RefCounted *ref_counted = Object::cast_to<RefCounted>(instance->get_owner());
-		if (ref_counted) {
-			ref_counted->reference();
-		}
+		instance->update_js_reference();
 	}
 }
 
 static GDExtensionBool script_instance_refcount_decremented(GDExtensionScriptInstanceDataPtr p_instance) {
 	ScriptInstance *instance = cast_instance(p_instance);
 	if (instance) {
-		RefCounted *ref_counted = Object::cast_to<RefCounted>(instance->get_owner());
-		if (ref_counted) {
-			return ref_counted->unreference();
-		}
-		return false;
+		instance->update_js_reference();
 	}
+	// Godot already adjusted the native reference count. Adjust only the JS
+	// handle above; referencing the native owner here creates a lifetime cycle.
 	return true;
 }
 

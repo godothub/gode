@@ -1,3 +1,8 @@
+## 2.4.7
+
+- Fixed custom TypeScript resource saving and signal handling.
+- Fixed resource leaks and script reload crashes.
+
 ## 2.4.6
 
 - Updated the embedded Node.js to `24.21.0`.

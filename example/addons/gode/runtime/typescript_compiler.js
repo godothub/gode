@@ -820,11 +820,66 @@
 		return replacement === specifierText ? "" : replacement;
 	}
 
-	function createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config) {
+	function findDefaultClass(tsApi, sourceFile) {
+		let exportedName;
+		for (const statement of sourceFile.statements) {
+			if (tsApi.isClassDeclaration(statement) && statement.modifiers &&
+					statement.modifiers.some(modifier => modifier.kind === tsApi.SyntaxKind.DefaultKeyword)) {
+				return statement;
+			}
+			if (tsApi.isExportAssignment(statement) && !statement.isExportEquals &&
+					tsApi.isIdentifier(statement.expression)) {
+				exportedName = statement.expression.text;
+			} else if (tsApi.isExportDeclaration(statement) && !statement.moduleSpecifier &&
+					!statement.isTypeOnly && statement.exportClause && tsApi.isNamedExports(statement.exportClause)) {
+				for (const specifier of statement.exportClause.elements) {
+					if (!specifier.isTypeOnly && specifier.name.text === "default") {
+						exportedName = (specifier.propertyName || specifier.name).text;
+					}
+				}
+			}
+		}
+		return sourceFile.statements.find(statement => tsApi.isClassDeclaration(statement) &&
+			statement.name && statement.name.text === exportedName);
+	}
+
+	function isGodotScriptClass(tsApi, program, sourcePath) {
+		const sourceFile = program.getSourceFile(sourcePath);
+		const classNode = sourceFile && findDefaultClass(tsApi, sourceFile);
+		if (!classNode) {
+			return false;
+		}
+		const checker = program.getTypeChecker();
+		const visited = new Set();
+		function inheritsGodotObject(type) {
+			const symbol = type.getSymbol();
+			if (!symbol || visited.has(symbol)) {
+				return false;
+			}
+			visited.add(symbol);
+			return (symbol.declarations || []).some(declaration => {
+				if (!tsApi.isClassDeclaration(declaration) && !tsApi.isClassExpression(declaration)) {
+					return false;
+				}
+				if (declaration.name && (declaration.name.text === "GodotObject" || declaration.name.text === "_GodotObject") &&
+						normalizePath(declaration.getSourceFile().fileName) === "res://addons/gode/types/godot.d.ts") {
+					return true;
+				}
+				// Follow runtime extends clauses, not implemented or merged interfaces.
+				return (declaration.heritageClauses || []).some(clause =>
+					clause.token === tsApi.SyntaxKind.ExtendsKeyword && clause.types.some(base =>
+						inheritsGodotObject(checker.getTypeAtLocation(base.expression))));
+			});
+		}
+		return inheritsGodotObject(checker.getTypeAtLocation(classNode));
+	}
+
+	function createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config, preserveSignals) {
 		const baseHost = createBaseHost(context, tsApi);
 
 		return (transformContext) => {
 			const factory = transformContext.factory || tsApi.factory;
+			let defaultClass;
 
 			function rewriteModuleSpecifier(specifierNode) {
 				if (!isStringLiteralNode(tsApi, specifierNode)) {
@@ -834,7 +889,45 @@
 				return replacement ? factory.createStringLiteral(replacement) : specifierNode;
 			}
 
+			function preserveNativeSignal(member) {
+				if (!tsApi.isPropertyDeclaration(member) || member.initializer || !tsApi.isIdentifier(member.name) ||
+						(member.modifiers && member.modifiers.some(modifier => modifier.kind === tsApi.SyntaxKind.StaticKeyword)) ||
+						!member.type || !tsApi.isTypeReferenceNode(member.type) || !tsApi.isIdentifier(member.type.typeName) ||
+						member.type.typeName.text !== "Signal" || !member.type.typeArguments || !member.type.typeArguments.length) {
+					return member;
+				}
+				// Signal<T> declares an engine-owned signal. Its object is bound during
+				// super(), so an emitted class field would replace it with undefined.
+				const modifiers = member.modifiers || [];
+				if (modifiers.some(modifier => modifier.kind === tsApi.SyntaxKind.DeclareKeyword)) {
+					return member;
+				}
+				const declaration = factory.updatePropertyDeclaration(member,
+					[...modifiers, factory.createModifier(tsApi.SyntaxKind.DeclareKeyword)], member.name,
+					member.questionToken || member.exclamationToken, member.type, member.initializer);
+				declaration.flags |= tsApi.NodeFlags.Ambient;
+				return declaration;
+			}
+
 			function visit(node) {
+				// Record the source on the actual default class, including local exports
+				// and anonymous classes, before any user static initializer can construct it.
+				// The native Resource constructor uses this to attach the script to
+				// the existing JS object instead of invoking its constructor again.
+				if (node === defaultClass && node.heritageClauses &&
+						node.heritageClauses.some(clause => clause.token === tsApi.SyntaxKind.ExtendsKeyword)) {
+					const marker = factory.createPropertyDeclaration(
+						[factory.createModifier(tsApi.SyntaxKind.StaticKeyword)],
+						factory.createComputedPropertyName(factory.createCallExpression(
+							factory.createPropertyAccessExpression(factory.createIdentifier("Symbol"), "for"),
+							undefined, [factory.createStringLiteral("__gode.script_path__")])),
+						undefined, undefined, factory.createStringLiteral(sourcePath));
+					// Signal annotations are native declarations only on actual Godot
+					// subclasses. Ordinary TypeScript classes keep their field semantics.
+					const members = preserveSignals ? node.members.map(preserveNativeSignal) : node.members;
+					node = factory.updateClassDeclaration(node, node.modifiers, node.name,
+						node.typeParameters, node.heritageClauses, [marker, ...members]);
+				}
 				if (tsApi.isImportDeclaration(node) && node.moduleSpecifier) {
 					const moduleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier);
 					if (moduleSpecifier !== node.moduleSpecifier) {
@@ -872,7 +965,10 @@
 				return tsApi.visitEachChild(node, visit, transformContext);
 			}
 
-			return (sourceFile) => tsApi.visitNode(sourceFile, visit);
+			return (sourceFile) => {
+				defaultClass = findDefaultClass(tsApi, sourceFile);
+				return tsApi.visitNode(sourceFile, visit);
+			};
 		};
 	}
 
@@ -946,7 +1042,8 @@
 					fileName: sourcePath,
 					reportDiagnostics: true,
 					transformers: {
-						before: [createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config)]
+						before: [createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config,
+							isGodotScriptClass(tsApi, program, sourcePath))]
 					}
 				});
 				outputs.push({

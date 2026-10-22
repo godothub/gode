@@ -70,6 +70,12 @@ void TypeScriptScript::release_all_runtime_state() {
 	}
 }
 
+void TypeScriptScript::cache_constructed_class(const Napi::Function &p_class) {
+	if (default_class.IsEmpty()) {
+		default_class = Napi::Persistent(p_class);
+	}
+}
+
 void TypeScriptScript::release_runtime_state() {
 	std::vector<ScriptInstance *> active_instances;
 	active_instances.reserve(instances.size());
@@ -338,9 +344,24 @@ Error TypeScriptScript::_reload(bool p_keep_state) {
 		return Error::ERR_INVALID_PARAMETER;
 	}
 
-	// Reload all instances
+	// Constructors can add same-script instances or destroy other owners while
+	// reloading. Keep owner IDs instead of iterating the mutable instance set or
+	// retaining ScriptInstance pointers across calls into user code.
+	std::vector<ObjectID> owners;
+	owners.reserve(instances.size());
 	for (ScriptInstance *instance : instances) {
-		if (instance && !instance->is_placeholder()) {
+		if (instance && instance->get_owner()) {
+			owners.push_back(ObjectID(instance->get_owner()->get_instance_id()));
+		}
+	}
+	for (ObjectID owner_id : owners) {
+		Object *owner = ObjectDB::get_instance(owner_id);
+		if (!owner) {
+			continue;
+		}
+		ScriptInstance *instance = static_cast<ScriptInstance *>(gdextension_interface::object_get_script_instance(
+				owner->_owner, TypeScriptLanguage::get_singleton()->_owner));
+		if (instance && instances.has(instance) && !instance->is_placeholder()) {
 			instance->reload(p_keep_state);
 		}
 	}

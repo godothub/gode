@@ -73,6 +73,7 @@ public:
 
 void register_class(const std::string &name, const std::string &godot_class_name, Napi::FunctionReference *ref, UnwrapFunc unwrapper, WrapFunc wrapper, CreateFunc creator);
 godot::Object *consume_script_instance_owner();
+Napi::Object consume_script_instance_object(godot::Object *owner);
 godot::Object *unwrap_godot_object(const Napi::Object &value);
 void register_godot_instance(godot::Object *obj, Napi::Object js_obj);
 Napi::Value wrap_godot_object(Napi::Env env, godot::Object *obj, const std::string &registered_class_name = "");
