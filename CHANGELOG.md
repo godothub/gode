@@ -1,3 +1,8 @@
+## 2.4.8
+
+- Fixed mouse interaction and tooltips for TypeScript UI controls.
+- Fixed script method lookup, parameter counts, and notification callbacks.
+
 ## 2.4.7
 
 - Fixed custom TypeScript resource saving and signal handling.
