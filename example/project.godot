@@ -15,8 +15,8 @@ run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/stretch_mode=0
 boot_splash/use_filter=false
-boot_splash/image="uid://blhgh808br6o6"
-config/icon="uid://bihghsjcc5la3"
+boot_splash/image="res://logo.png"
+config/icon="res://icon.png"
 
 [autoload]
 
