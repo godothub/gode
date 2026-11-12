@@ -176,13 +176,12 @@ def run_smoke(args):
 		extensions.append(args.editor_extension)
 	ensure_extension_list(project, extensions, args.editor_template)
 
-	command = [
-		str(godot),
-		"--headless",
-		"--path",
-		str(project),
-		args.scene,
-	]
+	command = [str(godot)]
+	if args.windowed:
+		command += ["--rendering-method", "gl_compatibility", "--audio-driver", "Dummy", "--resolution", "640x600"]
+	else:
+		command.append("--headless")
+	command += ["--path", str(project), args.scene]
 	print("[gode-smoke] " + " ".join(command))
 
 	result = subprocess.run(
@@ -226,7 +225,7 @@ def run_smoke(args):
 
 
 def build_parser():
-	parser = argparse.ArgumentParser(description="Run the Gode Godot headless smoke test scene.")
+	parser = argparse.ArgumentParser(description="Run the Gode Godot smoke test scene.")
 	parser.add_argument("--godot", help="Path to the Godot executable. Defaults to GODOT_BIN or common install locations.")
 	parser.add_argument("--project", default="example", help="Path to the Godot project directory relative to the repo root.")
 	parser.add_argument("--scene", default="res://scenes/tests_runner.tscn", help="Godot scene path to run.")
@@ -236,6 +235,7 @@ def build_parser():
 	parser.add_argument("--marker", default=DEFAULT_MARKER, help="Output marker that proves the JS test completed.")
 	parser.add_argument("--timeout", type=int, default=45, help="Seconds before the Godot process is terminated.")
 	parser.add_argument("--strict-exit-leaks", action="store_true", help="Fail if Godot reports exit-time leaks.")
+	parser.add_argument("--windowed", action="store_true", help="Run with a window and the compatibility renderer to test GUI input.")
 	return parser
 
 
