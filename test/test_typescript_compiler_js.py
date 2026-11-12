@@ -105,6 +105,65 @@ class TypeScriptCompilerScriptTests(unittest.TestCase):
 				f"stderr:\n{completed.stderr}"
 			)
 
+	def test_argument_counts_use_resolved_typescript_signatures(self):
+		self.run_compiler_fixture(
+			r"""
+			const marker = Symbol.for("__gode.method_argument_counts__");
+			for (const target of ["ES2015", "ES2022"]) {
+				for (const useDefineForClassFields of [false, true]) {
+					const files = new Map([
+						["res://tsconfig.json", JSON.stringify({ compilerOptions: { target, useDefineForClassFields, types: [] } })],
+						["res://addons/gode/types/godot.d.ts", godotSignalTypes.replace(
+							"class Resource extends GodotObject {}", "class Resource extends GodotObject { nativeMethod(value: number): void; }")],
+						["res://scripts/callbacks.ts", `
+							export type Handler = (left: number, right?: number) => number;
+							export type Identity<T> = T;
+							export interface Callback { (left: number, right?: number): number; }
+						`],
+						["res://scripts/subject.ts", `
+							import { Resource } from 'godot';
+							import type { Handler, Identity, Callback } from './callbacks';
+							class Base extends Resource {
+								inherited(left: number = 1, right: number = 2): number { return left + right; }
+								overridden(left: number, right: number = 2): number { return left + right; }
+							}
+							export default class extends Base {
+								assigned: Identity<Handler>;
+								nullable: Handler | null;
+								constructor() {
+									super();
+									this.assigned = (left: number, right: number = 2) => left + right;
+									this.nullable = this.assigned;
+								}
+								get callback(): Callback { return (left: number, right: number = 2) => left + right; }
+								overridden(left: number): number { return left; }
+								arrow = (left: number = 1, right: number = 2) => left + right;
+								explicitThis = function(this: Resource, left: number, right: number = 2) { return left + right; };
+								static staticMethod(left: number, right: number = 2) { return left + right; }
+							}
+						`]
+					]);
+					const result = runCompiler(files);
+					assertOk(result);
+					const output = result.outputs.find(item => item.source === "res://scripts/subject.ts");
+					const code = withGodotResourceMock(output.code);
+					const url = "data:text/javascript;base64," + Buffer.from(code).toString("base64");
+					import(url).then(({ default: Script }) => {
+						if (!Object.hasOwn(Script, marker)) throw new Error("Default class did not own its argument metadata");
+						const counts = Script[marker];
+						for (const name of ["inherited", "assigned", "nullable", "callback", "arrow", "explicitThis"]) {
+							if (counts[name] !== 2) throw new Error(`${target}/${useDefineForClassFields}: ${name} expected 2, got ${counts[name]}`);
+						}
+						if (counts.overridden !== 1) throw new Error("Derived declaration did not override base metadata");
+						if (Object.hasOwn(counts, "nativeMethod") || Object.hasOwn(counts, "staticMethod")) {
+							throw new Error("Native or static methods leaked into instance metadata");
+						}
+					}).catch(error => { console.error(error); process.exitCode = 1; });
+				}
+			}
+			"""
+		)
+
 	def test_default_class_records_source_for_native_resource_construction(self):
 		self.run_compiler_fixture(
 			r"""

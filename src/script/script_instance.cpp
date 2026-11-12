@@ -6,6 +6,7 @@
 #include "script/typescript_script.h"
 #include <v8-isolate.h>
 #include <v8-locker.h>
+#include <algorithm>
 #include <exception>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -21,7 +22,6 @@ namespace gode {
 namespace {
 
 constexpr const char *CPP_BINDING_PROTO_MARKER = "__gode.cpp_binding__";
-constexpr const char *PROTO_PROP_NAME = "__proto__";
 
 bool _is_cpp_binding_prototype(const Napi::Object &p_proto, const Napi::Symbol &p_marker_symbol) {
 	if (!p_proto.HasOwnProperty(p_marker_symbol)) {
@@ -36,10 +36,13 @@ bool _is_cpp_binding_prototype(const Napi::Object &p_proto, const Napi::Symbol &
 }
 
 bool _find_script_method_from_prototype_chain(const Napi::Object &p_instance, const std::string &p_method_name, Napi::Function *r_method = nullptr) {
+	if (p_method_name == "constructor") {
+		return false;
+	}
 	Napi::Env env = p_instance.Env();
 	Napi::Symbol marker_symbol = Napi::Symbol::For(env, CPP_BINDING_PROTO_MARKER);
 
-	Napi::Value proto_val = p_instance.Get(PROTO_PROP_NAME);
+	Napi::Value proto_val = p_instance;
 	while (proto_val.IsObject()) {
 		Napi::Object proto = proto_val.As<Napi::Object>();
 
@@ -49,7 +52,8 @@ bool _find_script_method_from_prototype_chain(const Napi::Object &p_instance, co
 		}
 
 		if (proto.HasOwnProperty(p_method_name)) {
-			Napi::Value method_val = proto.Get(p_method_name);
+			// Read through the instance so accessors keep the original receiver.
+			Napi::Value method_val = p_instance.Get(p_method_name);
 			if (!method_val.IsFunction()) {
 				return false;
 			}
@@ -59,7 +63,7 @@ bool _find_script_method_from_prototype_chain(const Napi::Object &p_instance, co
 			return true;
 		}
 
-		proto_val = proto.Get(PROTO_PROP_NAME);
+		proto_val = proto.GetPrototype();
 	}
 
 	return false;
@@ -569,6 +573,9 @@ bool ScriptInstance::get(const StringName &p_name, Variant &r_value) const {
 }
 
 bool ScriptInstance::has_method(const StringName &p_method) const {
+	if (!script.is_valid()) {
+		return false;
+	}
 	if (placeholder) {
 		return script->_has_method(p_method);
 	}
@@ -578,24 +585,88 @@ bool ScriptInstance::has_method(const StringName &p_method) const {
 	if (!NodeRuntime::is_running()) {
 		return false;
 	}
-	return script->_has_method(p_method);
+	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
+	const std::string method_name = String(p_method).utf8().get_data();
+	try {
+		Napi::Object instance = js_instance.Value();
+		const bool found = _find_script_method_from_prototype_chain(instance, method_name);
+		return !log_and_clear_pending_js_exception(instance.Env(), "JS method lookup " + method_name) && found;
+	} catch (const Napi::Error &e) {
+		log_js_error("JS method lookup " + method_name, js_error_to_string(e));
+	} catch (const std::exception &e) {
+		UtilityFunctions::printerr("Native exception in JS method lookup ", method_name.c_str(), ": ", e.what());
+	} catch (...) {
+		UtilityFunctions::printerr("Unknown exception in JS method lookup ", method_name.c_str());
+	}
+	return false;
 }
 
 int32_t ScriptInstance::get_method_argument_count(const StringName &p_method, bool &r_is_valid) const {
+	r_is_valid = false;
 	if (!script.is_valid()) {
-		r_is_valid = false;
 		return 0;
 	}
 	if (!script->compile()) {
-		r_is_valid = false;
 		return 0;
 	}
-	if (!script->methods.has(p_method)) {
-		r_is_valid = false;
+	const MethodInfo *method_info = script->methods.getptr(p_method);
+	const int32_t declared_count = method_info ? method_info->arguments.size() : -1;
+	if (placeholder) {
+		r_is_valid = declared_count >= 0;
+		return r_is_valid ? declared_count : 0;
+	}
+	if (js_instance.IsEmpty() || !NodeRuntime::is_running()) {
 		return 0;
 	}
-	r_is_valid = true;
-	return script->methods[p_method].arguments.size();
+
+	v8::Locker locker(NodeRuntime::isolate);
+	v8::Isolate::Scope isolate_scope(NodeRuntime::isolate);
+	v8::HandleScope handle_scope(NodeRuntime::isolate);
+	v8::Context::Scope context_scope(NodeRuntime::node_context.Get(NodeRuntime::isolate));
+	const std::string method_name = String(p_method).utf8().get_data();
+	try {
+		Napi::Object instance = js_instance.Value();
+		Napi::Function method;
+		const bool found = _find_script_method_from_prototype_chain(instance, method_name, &method);
+		if (log_and_clear_pending_js_exception(instance.Env(), "JS method argument count " + method_name) || !found) {
+			return 0;
+		}
+		int32_t argument_count = declared_count;
+		// The compiler resolves inherited signatures, aliases and callable fields.
+		Napi::Function script_class = script->get_cached_default_class();
+		const Napi::Symbol counts_symbol = Napi::Symbol::For(instance.Env(), "__gode.method_argument_counts__");
+		if (!script_class.IsEmpty() && script_class.HasOwnProperty(counts_symbol)) {
+			Napi::Value counts_value = script_class.Get(counts_symbol);
+			if (counts_value.IsObject()) {
+				Napi::Object counts = counts_value.As<Napi::Object>();
+				if (counts.HasOwnProperty(method_name)) {
+					argument_count = counts.Get(method_name).As<Napi::Number>().Int32Value();
+				}
+			}
+		}
+		if (log_and_clear_pending_js_exception(instance.Env(), "JS method argument count " + method_name)) {
+			return 0;
+		}
+		if (argument_count < 0) {
+			Napi::Value length = method.Get("length");
+			if (log_and_clear_pending_js_exception(instance.Env(), "JS method argument count " + method_name) || !length.IsNumber()) {
+				return 0;
+			}
+			argument_count = length.As<Napi::Number>().Int32Value();
+		}
+		r_is_valid = true;
+		return argument_count;
+	} catch (const Napi::Error &e) {
+		log_js_error("JS method argument count " + method_name, js_error_to_string(e));
+	} catch (const std::exception &e) {
+		UtilityFunctions::printerr("Native exception in JS method argument count ", method_name.c_str(), ": ", e.what());
+	} catch (...) {
+		UtilityFunctions::printerr("Unknown exception in JS method argument count ", method_name.c_str());
+	}
+	return 0;
 }
 
 Variant ScriptInstance::call(const StringName &p_method, const Variant *p_args, int32_t p_argcount, GDExtensionCallError &r_error) {
@@ -628,18 +699,12 @@ Variant ScriptInstance::call(const StringName &p_method, const Variant *p_args, 
 	std::string method_name = String(p_method).utf8().get_data();
 
 	try {
-		if (!instance.Has(method_name)) {
+		Napi::Function method;
+		const bool found = _find_script_method_from_prototype_chain(instance, method_name, &method);
+		if (log_and_clear_pending_js_exception(env, "JS method " + method_name + " lookup") || !found) {
 			r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 			return Variant();
 		}
-
-		Napi::Value method_value = instance.Get(method_name);
-		if (!method_value.IsFunction()) {
-			r_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
-			return Variant();
-		}
-
-		Napi::Function method = method_value.As<Napi::Function>();
 
 		std::vector<napi_value> args;
 		args.reserve(p_argcount);
@@ -702,20 +767,36 @@ Variant ScriptInstance::call(const StringName &p_method, const Variant *p_args, 
 }
 
 void ScriptInstance::notification_bind(Napi::Object instance, int32_t p_what, bool p_reversed) {
-	static std::string notification_method_name = "_notification";
-	Napi::Value method_val;
-	if (!instance.IsUndefined() && instance.HasOwnProperty(notification_method_name)) {
-		method_val = instance.Get(notification_method_name);
-		if (method_val.IsFunction()) {
-			Napi::Object globalObject = instance.Env().Global().Get("Object").As<Napi::Object>();
-			Napi::Function getPrototypeOf = globalObject.Get("getPrototypeOf").As<Napi::Function>();
-			Napi::Object proto = getPrototypeOf.Call(globalObject, { instance }).As<Napi::Object>();
-
-			if (!p_reversed) {
-				notification_bind(proto, p_what, p_reversed);
+	const std::string notification_method_name = "_notification";
+	std::vector<Napi::Function> methods;
+	try {
+		const Napi::Symbol marker_symbol = Napi::Symbol::For(instance.Env(), CPP_BINDING_PROTO_MARKER);
+		Napi::Object reflect = instance.Env().Global().Get("Reflect").As<Napi::Object>();
+		Napi::Function reflect_get = reflect.Get("get").As<Napi::Function>();
+		Napi::String method_name = Napi::String::New(instance.Env(), notification_method_name);
+		Napi::Value proto_val = instance;
+		while (proto_val.IsObject()) {
+			Napi::Object proto = proto_val.As<Napi::Object>();
+			if (_is_cpp_binding_prototype(proto, marker_symbol)) {
+				break;
 			}
-
-			Napi::Function method = method_val.As<Napi::Function>();
+			if (proto.HasOwnProperty(notification_method_name)) {
+				// Read this level's descriptor with the original receiver, including getters.
+				Napi::Value method_val = reflect_get.Call(reflect, { proto, method_name, instance });
+				if (method_val.IsFunction()) {
+					methods.push_back(method_val.As<Napi::Function>());
+				}
+			}
+			proto_val = proto.GetPrototype();
+		}
+		if (log_and_clear_pending_js_exception(instance.Env(), "JS notification lookup")) {
+			return;
+		}
+		// Godot notifies every script level, using the original instance as `this`.
+		if (!p_reversed) {
+			std::reverse(methods.begin(), methods.end());
+		}
+		for (const Napi::Function &method : methods) {
 			try {
 				Napi::Value result = method.Call(instance, { Napi::Number::New(instance.Env(), p_what), Napi::Boolean::New(instance.Env(), p_reversed) });
 				if (!log_and_clear_pending_js_exception(instance.Env(), "JS notification " + notification_method_name)) {
@@ -728,11 +809,13 @@ void ScriptInstance::notification_bind(Napi::Object instance, int32_t p_what, bo
 			} catch (...) {
 				UtilityFunctions::printerr("Unknown exception in JS notification");
 			}
-
-			if (p_reversed) {
-				notification_bind(proto, p_what, p_reversed);
-			}
 		}
+	} catch (const Napi::Error &e) {
+		log_js_error("JS notification lookup", js_error_to_string(e));
+	} catch (const std::exception &e) {
+		UtilityFunctions::printerr("Native exception in JS notification lookup: ", e.what());
+	} catch (...) {
+		UtilityFunctions::printerr("Unknown exception in JS notification lookup");
 	}
 }
 
@@ -776,30 +859,21 @@ String ScriptInstance::to_string(bool &r_is_valid) const {
 		Napi::Object obj = js_instance.Value();
 		Napi::Env env = obj.Env();
 		try {
-			Napi::Value proto_val = obj.Get("__proto__");
-			if (log_and_clear_pending_js_exception(env, "JS toString prototype lookup")) {
+			Napi::Function method;
+			const bool found = _find_script_method_from_prototype_chain(obj, "toString", &method);
+			if (log_and_clear_pending_js_exception(env, "JS toString lookup")) {
 				r_is_valid = false;
 				return String();
 			}
-			if (proto_val.IsObject()) {
-				Napi::Object proto = proto_val.As<Napi::Object>();
-				if (proto.HasOwnProperty("toString")) {
-					Napi::Value ts_val = proto.Get("toString");
-					if (log_and_clear_pending_js_exception(env, "JS toString lookup")) {
-						r_is_valid = false;
-						return String();
-					}
-					if (ts_val.IsFunction()) {
-						Napi::Value result = ts_val.As<Napi::Function>().Call(obj, {});
-						if (log_and_clear_pending_js_exception(env, "JS toString call")) {
-							r_is_valid = false;
-							return String();
-						}
-						if (result.IsString()) {
-							r_is_valid = true;
-							return String(result.As<Napi::String>().Utf8Value().c_str());
-						}
-					}
+			if (found) {
+				Napi::Value result = method.Call(obj, {});
+				if (log_and_clear_pending_js_exception(env, "JS toString call")) {
+					r_is_valid = false;
+					return String();
+				}
+				if (result.IsString()) {
+					r_is_valid = true;
+					return String(result.As<Napi::String>().Utf8Value().c_str());
 				}
 			}
 		} catch (const Napi::Error &e) {

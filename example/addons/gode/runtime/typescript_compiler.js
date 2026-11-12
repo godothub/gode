@@ -874,7 +874,26 @@
 		return inheritsGodotObject(checker.getTypeAtLocation(classNode));
 	}
 
-	function createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config, preserveSignals) {
+	function scriptMethodArgumentCounts(tsApi, program, sourcePath) {
+		const sourceFile = program.getSourceFile(sourcePath);
+		const classNode = sourceFile && findDefaultClass(tsApi, sourceFile);
+		if (!classNode) {
+			return [];
+		}
+		const checker = program.getTypeChecker();
+		return checker.getPropertiesOfType(checker.getTypeAtLocation(classNode)).flatMap(property => {
+			// Native methods are handled by Godot, not by the script instance.
+			if (!(property.declarations || []).some(declaration =>
+					normalizePath(declaration.getSourceFile().fileName) !== "res://addons/gode/types/godot.d.ts")) {
+				return [];
+			}
+			const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, classNode));
+			const signatures = checker.getSignaturesOfType(type, tsApi.SignatureKind.Call);
+			return signatures.length ? [[property.getName(), Math.max(...signatures.map(signature => signature.parameters.length))]] : [];
+		}).sort(([left], [right]) => left.localeCompare(right));
+	}
+
+	function createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config, preserveSignals, argumentCounts) {
 		const baseHost = createBaseHost(context, tsApi);
 
 		return (transformContext) => {
@@ -910,12 +929,13 @@
 			}
 
 			function visit(node) {
-				// Record the source on the actual default class, including local exports
+				// Record metadata on the actual default class, including local exports
 				// and anonymous classes, before any user static initializer can construct it.
 				// The native Resource constructor uses this to attach the script to
 				// the existing JS object instead of invoking its constructor again.
-				if (node === defaultClass && node.heritageClauses &&
-						node.heritageClauses.some(clause => clause.token === tsApi.SyntaxKind.ExtendsKeyword)) {
+				if (node === defaultClass) {
+					const hasBase = node.heritageClauses &&
+						node.heritageClauses.some(clause => clause.token === tsApi.SyntaxKind.ExtendsKeyword);
 					const marker = factory.createPropertyDeclaration(
 						[factory.createModifier(tsApi.SyntaxKind.StaticKeyword)],
 						factory.createComputedPropertyName(factory.createCallExpression(
@@ -925,8 +945,16 @@
 					// Signal annotations are native declarations only on actual Godot
 					// subclasses. Ordinary TypeScript classes keep their field semantics.
 					const members = preserveSignals ? node.members.map(preserveNativeSignal) : node.members;
+					const counts = factory.createPropertyDeclaration(
+						[factory.createModifier(tsApi.SyntaxKind.StaticKeyword)],
+						factory.createComputedPropertyName(factory.createCallExpression(
+							factory.createPropertyAccessExpression(factory.createIdentifier("Symbol"), "for"),
+							undefined, [factory.createStringLiteral("__gode.method_argument_counts__")])),
+						undefined, undefined, factory.createObjectLiteralExpression(argumentCounts.map(([name, count]) =>
+							factory.createPropertyAssignment(factory.createComputedPropertyName(factory.createStringLiteral(name)),
+								factory.createNumericLiteral(count)))));
 					node = factory.updateClassDeclaration(node, node.modifiers, node.name,
-						node.typeParameters, node.heritageClauses, [marker, ...members]);
+						node.typeParameters, node.heritageClauses, [...(hasBase ? [marker] : []), counts, ...members]);
 				}
 				if (tsApi.isImportDeclaration(node) && node.moduleSpecifier) {
 					const moduleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier);
@@ -1043,7 +1071,7 @@
 					reportDiagnostics: true,
 					transformers: {
 						before: [createProjectModuleSpecifierTransformer(tsApi, sourcePath, context, config,
-							isGodotScriptClass(tsApi, program, sourcePath))]
+							isGodotScriptClass(tsApi, program, sourcePath), scriptMethodArgumentCounts(tsApi, program, sourcePath))]
 					}
 				});
 				outputs.push({

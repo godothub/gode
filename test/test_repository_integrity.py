@@ -569,12 +569,11 @@ class RepositoryIntegrityTests(unittest.TestCase):
 
 		has_method_body = source_between("bool ScriptInstance::has_method", "int32_t ScriptInstance::get_method_argument_count")
 		self.assertIn("return script->_has_method(p_method);", has_method_body)
-		self.assertNotIn("v8::Locker locker(NodeRuntime::isolate);", has_method_body)
 
 		method_start = source.index("int32_t ScriptInstance::get_method_argument_count")
 		method_end = source.index("Variant ScriptInstance::call", method_start)
 		method_body = source[method_start:method_end]
-		self.assertNotIn("v8::Locker locker(NodeRuntime::isolate);", method_body)
+		self.assertLess(method_body.index("script->compile()"), method_body.index("v8::Locker locker(NodeRuntime::isolate);"))
 
 		to_string_body = source_between("String ScriptInstance::to_string", "bool ScriptInstance::property_can_revert")
 		to_string_locker = to_string_body.index("v8::Locker locker(NodeRuntime::isolate);")
@@ -782,7 +781,7 @@ class RepositoryIntegrityTests(unittest.TestCase):
 			instance_source.index("int32_t ScriptInstance::get_method_argument_count") :
 			instance_source.index("Variant ScriptInstance::call")
 		]
-		self.assertIn("script->methods.has(p_method)", instance_argument_count_body)
+		self.assertIn("script->methods.getptr(p_method)", instance_argument_count_body)
 		self.assertNotIn("static_methods", instance_argument_count_body)
 
 		instance_method_list_body = instance_source[
