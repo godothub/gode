@@ -171,7 +171,7 @@ bool should_skip_directory(const String &directory_path) {
 			return true;
 		}
 	}
-	return false;
+	return FileAccess::file_exists(directory_path.path_join(".gdignore"));
 }
 
 Dictionary make_error_diagnostic(const String &message, const String &file_path = String()) {
