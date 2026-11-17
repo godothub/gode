@@ -188,6 +188,9 @@ jobs:
       - name: Run Godot smoke tests
         run: python test/run_godot_smoke.py --godot "$GODOT_BIN" --strict-exit-leaks
 
+      - name: Run TypeScript project compiler smoke tests
+        run: python test/run_typescript_project_smoke.py --godot "$GODOT_BIN"
+
       - name: Install GUI test dependencies
         run: |
           sudo apt-get update
