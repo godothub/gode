@@ -1,3 +1,10 @@
+## 2.4.9
+
+- Fixed compilation of explicitly imported scripts.
+- Fixed type declaration changes not taking effect.
+- Fixed path resolution and delayed updates in inherited TypeScript configurations.
+- Improved TypeScript startup and compilation speed by skipping unrelated directories.
+
 ## 2.4.8
 
 - Fixed mouse interaction and tooltips for TypeScript UI controls.
