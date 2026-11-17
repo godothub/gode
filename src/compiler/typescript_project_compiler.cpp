@@ -34,6 +34,7 @@ struct TypeScriptProjectCompileCache {
 	bool has_result = false;
 	uint64_t input_hash = 0;
 	int64_t source_count = 0;
+	Array inputs;
 	Dictionary result;
 };
 
@@ -52,6 +53,7 @@ void reset_project_compile_cache() {
 	cache.has_result = false;
 	cache.input_hash = 0;
 	cache.source_count = 0;
+	cache.inputs.clear();
 	cache.result = Dictionary();
 }
 
@@ -94,15 +96,6 @@ void update_hash_file(uint64_t &hash, const String &path) {
 		return;
 	}
 	update_hash_string(hash, content);
-}
-
-bool is_dts_path(const String &path) {
-	return path.to_lower().ends_with(".d.ts");
-}
-
-bool is_typescript_path(const String &path) {
-	String lower = path.to_lower();
-	return lower.ends_with(".ts") || lower.ends_with(".tsx");
 }
 
 String normalize_path_string(const String &path) {
@@ -151,29 +144,6 @@ String exported_build_root() {
 	return TYPESCRIPT_BUILD_ROOT;
 }
 
-bool should_skip_directory(const String &directory_path) {
-	String rel = resource_relative_path(directory_path).trim_suffix("/");
-	if (rel.is_empty()) {
-		return false;
-	}
-
-	static const char *skipped_prefixes[] = {
-		".godot",
-		".gode",
-		"node_modules",
-		GODE_ADDON_REL_PATH "tsc",
-		GODE_ADDON_REL_PATH "types"
-	};
-
-	for (const char *prefix : skipped_prefixes) {
-		String skipped(prefix);
-		if (rel == skipped || rel.begins_with(skipped + "/")) {
-			return true;
-		}
-	}
-	return FileAccess::file_exists(directory_path.path_join(".gdignore"));
-}
-
 Dictionary make_error_diagnostic(const String &message, const String &file_path = String()) {
 	Dictionary diagnostic;
 	diagnostic["category"] = "error";
@@ -196,35 +166,33 @@ bool read_source_file(const String &path, Dictionary &file, Array &diagnostics) 
 	return true;
 }
 
-void collect_sources_recursive(const String &directory_path, Array &sources, Array &diagnostics) {
-	if (should_skip_directory(directory_path)) {
-		return;
+Array collect_project_sources(Array &diagnostics) {
+	Array sources;
+	const StringName bridge_class(GODE_RUNTIME_BRIDGE_CLASS);
+	const StringName collect_method("collect_typescript_project_sources");
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	if (!settings || !ClassDB::class_has_method(bridge_class, collect_method)) {
+		diagnostics.append(make_error_diagnostic("Gode runtime TypeScript source collector is not loaded."));
+		return sources;
 	}
-
-	PackedStringArray files = DirAccess::get_files_at(directory_path);
-	for (int64_t i = 0; i < files.size(); i++) {
-		String file_name = files[i];
-		String file_path = directory_path.path_join(file_name);
-		if (!is_typescript_path(file_path) && !is_dts_path(file_path)) {
-			continue;
-		}
+	Variant value = ClassDB::class_call_static(bridge_class, collect_method, settings->globalize_path("res://"));
+	if (value.get_type() != Variant::DICTIONARY) {
+		diagnostics.append(make_error_diagnostic("Gode runtime TypeScript source collector returned an invalid result."));
+		return sources;
+	}
+	Dictionary collected = value;
+	if (!bool(collected.get("ok", false))) {
+		diagnostics.append_array(collected.get("diagnostics", Array()));
+		return sources;
+	}
+	Array paths = collected.get("files", Array());
+	for (int64_t i = 0; i < paths.size(); i++) {
 		Dictionary file;
-		if (read_source_file(file_path, file, diagnostics)) {
+		if (read_source_file(paths[i], file, diagnostics)) {
 			sources.append(file);
 		}
 	}
-
-	PackedStringArray directories = DirAccess::get_directories_at(directory_path);
-	for (int64_t i = 0; i < directories.size(); i++) {
-		String child = directory_path.path_join(directories[i]);
-		collect_sources_recursive(child, sources, diagnostics);
-	}
-}
-
-Array collect_project_sources(Array &diagnostics) {
-	Array sources;
-	collect_sources_recursive("res://", sources, diagnostics);
-	if (FileAccess::file_exists(GODE_GLOBAL_TYPES_PATH)) {
+	if (FileAccess::file_exists(GODE_GLOBAL_TYPES_PATH) && !paths.has(String(GODE_GLOBAL_TYPES_PATH))) {
 		Dictionary file;
 		if (read_source_file(GODE_GLOBAL_TYPES_PATH, file, diagnostics)) {
 			sources.append(file);
@@ -254,7 +222,28 @@ Array sorted_sources_by_path(const Array &sources) {
 	return result;
 }
 
-uint64_t project_input_hash(const Array &sources) {
+Array read_compile_inputs(const Array &inputs) {
+	// Recheck the exact dependencies and resolution probes from the previous compilation.
+	Array current;
+	for (int64_t i = 0; i < inputs.size(); i++) {
+		Dictionary input = Dictionary(inputs[i]).duplicate();
+		String path = input["path"];
+		const bool directory = bool(input.get("directory", false));
+		const bool exists = directory ? DirAccess::dir_exists_absolute(path) :
+				FileAccess::file_exists(path) || DirAccess::dir_exists_absolute(path);
+		input["exists"] = exists;
+		if (input.has("source")) {
+			input["source"] = exists ? Variant(FileAccess::get_file_as_string(path)) : Variant();
+			if (exists && FileAccess::get_open_error() != OK) {
+				input["source"] = "<unreadable>";
+			}
+		}
+		current.append(input);
+	}
+	return current;
+}
+
+uint64_t project_input_hash(const Array &sources, const Array &inputs) {
 	uint64_t hash = FNV1A_64_OFFSET_BASIS;
 	update_hash_string(hash, "gode-typescript-project-v1");
 	update_hash_integer(hash, static_cast<uint64_t>(sources.size()));
@@ -279,6 +268,17 @@ uint64_t project_input_hash(const Array &sources) {
 	};
 	for (const char *path : signature_file_paths) {
 		update_hash_file(hash, path);
+	}
+	for (int64_t i = 0; i < inputs.size(); i++) {
+		Dictionary input = inputs[i];
+		update_hash_string(hash, String(input["path"]));
+		update_hash_integer(hash, bool(input.get("directory", false)));
+		update_hash_integer(hash, bool(input.get("exists", false)));
+		update_hash_integer(hash, input.has("source"));
+		if (input.has("source")) {
+			Variant source = input["source"];
+			update_hash_string(hash, source.get_type() == Variant::STRING ? String(source) : String("<missing>"));
+		}
 	}
 	return hash;
 }
@@ -610,13 +610,12 @@ Dictionary compile_project_internal(bool force) {
 	}
 	sources = sorted_sources_by_path(sources);
 
-	const uint64_t input_hash = project_input_hash(sources);
 	TypeScriptProjectCompileCache &cache = project_compile_cache();
 	if (!force &&
 			cache.has_result &&
-			cache.input_hash == input_hash &&
 			cache.source_count == sources.size() &&
-			compile_result_outputs_are_present(cache.result)) {
+			compile_result_outputs_are_present(cache.result) &&
+			cache.input_hash == project_input_hash(sources, read_compile_inputs(cache.inputs))) {
 		Dictionary cached_result = duplicate_compile_result(cache.result);
 		cached_result["cached"] = true;
 		cached_result["compiled"] = 0;
@@ -628,6 +627,8 @@ Dictionary compile_project_internal(bool force) {
 	}
 
 	Dictionary compile_result = compile_sources_with_runtime(sources);
+	Array inputs = compile_result.get("inputs", Array());
+	const uint64_t compiled_input_hash = project_input_hash(sources, inputs);
 	Array diagnostics = compile_result.has("diagnostics") ? Array(compile_result["diagnostics"]) : Array();
 	result["diagnostics"] = diagnostics;
 	if (!bool(compile_result.get("ok", false))) {
@@ -638,8 +639,9 @@ Dictionary compile_project_internal(bool force) {
 		result["retryable"] = !cacheable_failure;
 		if (cacheable_failure) {
 			cache.has_result = true;
-			cache.input_hash = input_hash;
+			cache.input_hash = compiled_input_hash;
 			cache.source_count = sources.size();
+			cache.inputs = inputs;
 			cache.result = duplicate_compile_result(result);
 		}
 		return result;
@@ -672,8 +674,9 @@ Dictionary compile_project_internal(bool force) {
 	result["retryable"] = false;
 
 	cache.has_result = true;
-	cache.input_hash = input_hash;
+	cache.input_hash = compiled_input_hash;
 	cache.source_count = sources.size();
+	cache.inputs = inputs;
 	cache.result = duplicate_compile_result(result);
 	return result;
 }

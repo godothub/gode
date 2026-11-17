@@ -24,6 +24,7 @@ public:
 	static void run_script(const std::string &code);
 	static Napi::Value compile_script(const std::string &code, const std::string &filename);
 	static godot::Dictionary compile_typescript_project(const godot::Array &files);
+	static godot::Dictionary collect_typescript_project_sources(const godot::String &project_root);
 	static Napi::Function get_default_class(Napi::Value module_exports);
 	static godot::Variant eval_expression(const std::string &expr);
 	static void spin_loop();

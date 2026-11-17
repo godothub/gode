@@ -15,7 +15,8 @@
 	}
 
 	function normalizePath(filePath) {
-		return String(filePath || "").replace(/\\/g, "/");
+		const normalized = String(filePath || "").replace(/\\/g, "/");
+		return normalized.startsWith("res://") ? normalizeResourcePath(normalized) : normalized;
 	}
 
 	function isRelativeModuleName(moduleName) {
@@ -50,7 +51,7 @@
 	}
 
 	function normalizeResourcePath(filePath) {
-		const normalized = normalizePath(filePath);
+		const normalized = String(filePath || "").replace(/\\/g, "/");
 		const hasResourcePrefix = normalized.startsWith("res://");
 		if (normalized.includes("://") && !hasResourcePrefix) {
 			return "";
@@ -165,11 +166,11 @@
 	}
 
 	function configuredModuleCandidates(moduleName, config) {
-		const rawOptions = config.rawCompilerOptions || {};
+		const rawOptions = config.options || config.rawCompilerOptions || {};
 		const candidates = [];
 		const baseUrl = typeof rawOptions.baseUrl === "string" && rawOptions.baseUrl
 			? configPathBase(rawOptions.baseUrl)
-			: "res://";
+			: configPathBase(rawOptions.pathsBasePath || "res://");
 		if (!baseUrl) {
 			return candidates;
 		}
@@ -468,7 +469,7 @@
 		return dirs;
 	}
 
-	function createSourceContext(sources) {
+	function createSourceContext(sources, projectRoot = "", directoryEntries = null) {
 		const sourceMap = new Map();
 		const directories = new Set(["res://"]);
 
@@ -483,7 +484,10 @@
 		return {
 			sourceMap,
 			sourceFiles: Array.from(sourceMap.keys()).sort(),
-			directories
+			directories,
+			projectRoot,
+			directoryEntries,
+			inputs: new Map()
 		};
 	}
 
@@ -504,6 +508,25 @@
 			return `/__gode_res__/${normalized.slice("res://".length)}`;
 		}
 		return normalized;
+	}
+
+	function projectDirectoryEntries(context, virtualDirectory) {
+		// Prune automatic discovery; explicit imports still go through the compiler host.
+		const directory = fromTypescriptVirtualPath(virtualDirectory);
+		if (!directory.startsWith("res://")) {
+			return { files: [], directories: [] };
+		}
+		const relative = directory.slice("res://".length);
+		const skipped = [".godot", ".gode", "node_modules", "addons/gode/tsc", "addons/gode/types"];
+		const hasMarker = name => {
+			const marker = `${directory}${directory.endsWith("/") ? "" : "/"}${name}`;
+			return fs.existsSync(marker) && fs.statSync(marker).isFile();
+		};
+		if (relative && (skipped.some(prefix => relative === prefix || relative.startsWith(`${prefix}/`)) ||
+				hasMarker(".gdignore") || hasMarker("project.godot"))) {
+			return { files: [], directories: [] };
+		}
+		return context.directoryEntries(directory);
 	}
 
 	function fromTypescriptVirtualPath(filePath) {
@@ -576,13 +599,17 @@
 			return tsApi.matchFiles(
 				virtualDirectory,
 				extensions,
-				excludes,
-				includes,
+				excludes && excludes.map(toTypescriptVirtualPath),
+				includes && includes.map(toTypescriptVirtualPath),
 				true,
 				toTypescriptVirtualPath("res://"),
 				depth,
-				(directory) => fileSystemEntriesForVirtualDirectory(virtualSourceFiles, directory),
-				(filePath) => normalizePath(filePath)
+				(directory) => context.projectRoot ? projectDirectoryEntries(context, directory)
+					: fileSystemEntriesForVirtualDirectory(virtualSourceFiles, directory),
+				(filePath) => context.projectRoot
+					? normalizePath(tsApi.sys.realpath(path.join(context.projectRoot,
+						fromTypescriptVirtualPath(filePath).slice("res://".length))))
+					: normalizePath(filePath)
 			).map((filePath) => fromTypescriptVirtualPath(filePath));
 		}
 
@@ -621,7 +648,7 @@
 
 	function readTsConfig(tsApi, host) {
 		const configPath = "res://tsconfig.json";
-		if (!fs.existsSync(configPath)) {
+		if (!host.fileExists(configPath)) {
 			return { options: {}, rawCompilerOptions: {}, diagnostics: [], fileNames: [], hasConfig: false };
 		}
 
@@ -661,20 +688,33 @@
 	}
 
 	function createBaseHost(context, tsApi) {
+		const recordInput = (fileName, exists, extra = {}) => {
+			// Failed probes matter too: adding a missing module must invalidate the cache.
+			const key = `${extra.directory ? "directory" : "file"}:${fileName}`;
+			context.inputs.set(key, { ...context.inputs.get(key), path: fileName, exists, ...extra });
+		};
 		const readFile = (fileName) => {
 			const normalized = normalizePath(fileName);
 			if (context.sourceMap.has(normalized)) {
 				return context.sourceMap.get(normalized);
 			}
 			if (!fs.existsSync(normalized)) {
+				recordInput(normalized, false, { source: null });
 				return undefined;
 			}
-			return fs.readFileSync(normalized, "utf8");
+			const source = fs.readFileSync(normalized, "utf8");
+			recordInput(normalized, true, { source });
+			return source;
 		};
 
 		const fileExists = (fileName) => {
 			const normalized = normalizePath(fileName);
-			return context.sourceMap.has(normalized) || fs.existsSync(normalized);
+			if (context.sourceMap.has(normalized)) {
+				return true;
+			}
+			const exists = fs.existsSync(normalized);
+			recordInput(normalized, exists);
+			return exists;
 		};
 
 		const directoryExists = (directoryName) => {
@@ -682,7 +722,9 @@
 			if (context.directories.has(normalized)) {
 				return true;
 			}
-			return fs.existsSync(normalized) && fs.statSync(normalized).isDirectory();
+			const exists = fs.existsSync(normalized) && fs.statSync(normalized).isDirectory();
+			recordInput(normalized, exists, { directory: true });
+			return exists;
 		};
 
 		const readDirectory = (directoryName, extensions, excludes, includes, depth) => {
@@ -1007,21 +1049,35 @@
 		return sources.map((source) => normalizePath(source.path));
 	}
 
-	function emittableProgramSources(program, context) {
+	function emittableProgramSources(program) {
 		const outputs = [];
 		for (const sourceFile of program.getSourceFiles()) {
 			const sourcePath = normalizePath(sourceFile.fileName);
-			if (!context.sourceMap.has(sourcePath) || !isEmittableSource(sourcePath)) {
+			if (!sourcePath.startsWith("res://") || sourcePath.includes("/node_modules/") || !isEmittableSource(sourcePath)) {
 				continue;
 			}
 			outputs.push({
 				path: sourcePath,
-				source: context.sourceMap.get(sourcePath)
+				source: sourceFile.text
 			});
 		}
 		outputs.sort((left, right) => left.path.localeCompare(right.path));
 		return outputs;
 	}
+
+	globalThis.__gode_collect_typescript_project_sources = function(projectRoot, directoryEntries) {
+		try {
+			const tsApi = getTypescript();
+			const context = createSourceContext([], projectRoot, directoryEntries);
+			const host = createBaseHost(context, tsApi);
+			const config = readTsConfig(tsApi, host);
+			// Missing explicit files are diagnosed by createProgram, rather than by native reads.
+			return { ok: true, files: config.fileNames.filter(host.fileExists), diagnostics: [] };
+		} catch (error) {
+			return { ok: false, files: [], diagnostics: [{ category: "error", code: 0,
+				message: String(error.stack || error), file: "", line: 0, column: 0 }] };
+		}
+	};
 
 	globalThis.__gode_compile_typescript_project = function(files) {
 		try {
@@ -1059,7 +1115,7 @@
 			};
 			const outputs = [];
 
-			for (const source of emittableProgramSources(program, context)) {
+			for (const source of emittableProgramSources(program)) {
 				const sourcePath = source.path;
 				const sourceEmitOptions = {
 					...emitOptions,
@@ -1089,7 +1145,9 @@
 			return {
 				ok: !hasErrors,
 				outputs,
-				diagnostics: diagnosticsOut
+				diagnostics: diagnosticsOut,
+				inputs: Array.from(context.inputs.values()).sort((left, right) =>
+					left.path.localeCompare(right.path) || Number(!!left.directory) - Number(!!right.directory))
 			};
 		} catch (error) {
 			return {

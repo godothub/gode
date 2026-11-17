@@ -29,9 +29,10 @@ class TypeScriptCompilerScriptTests(unittest.TestCase):
 				return String(filePath || "").replace(/\\/g, "/");
 			}
 
-			function runCompiler(virtualFiles) {
+			function runCompiler(virtualFiles, sourcePaths = null, directoryEntries = null) {
 				const realExistsSync = fs.existsSync.bind(fs);
 				const realReadFileSync = fs.readFileSync.bind(fs);
+				const realStatSync = fs.statSync.bind(fs);
 				const realRequire = Module.prototype.require;
 				fs.existsSync = (filePath) => {
 					const normalized = normalize(filePath);
@@ -50,6 +51,8 @@ class TypeScriptCompilerScriptTests(unittest.TestCase):
 					}
 					return realReadFileSync(filePath, encoding);
 				};
+				fs.statSync = (filePath, ...args) => virtualFiles.has(normalize(filePath))
+					? { isFile: () => true, isDirectory: () => false } : realStatSync(filePath, ...args);
 				Module.prototype.require = function(request) {
 					if (request === "res://addons/gode/tsc/lib/typescript.js") {
 						return realRequire.call(this, typescriptPath);
@@ -60,13 +63,18 @@ class TypeScriptCompilerScriptTests(unittest.TestCase):
 				try {
 					const compilerSource = realReadFileSync(compilerPath, "utf8");
 					new Function("require", compilerSource)(require);
+					if (directoryEntries) {
+						return globalThis.__gode_collect_typescript_project_sources("/__gode_project__", directoryEntries);
+					}
 					const sources = Array.from(virtualFiles.entries())
 						.filter(([path]) => path.endsWith(".ts") || path.endsWith(".tsx") || path.endsWith(".d.ts"))
+						.filter(([path]) => !sourcePaths || sourcePaths.has(path))
 						.map(([path, source]) => ({ path, source }));
 					return globalThis.__gode_compile_typescript_project(sources);
 				} finally {
 					fs.existsSync = realExistsSync;
 					fs.readFileSync = realReadFileSync;
+					fs.statSync = realStatSync;
 					Module.prototype.require = realRequire;
 				}
 			}
@@ -104,6 +112,135 @@ class TypeScriptCompilerScriptTests(unittest.TestCase):
 				f"stdout:\n{completed.stdout}\n"
 				f"stderr:\n{completed.stderr}"
 			)
+
+	def test_explicit_imports_are_emitted_when_not_discovered_as_roots(self):
+		self.run_compiler_fixture(
+			r"""
+			const files = new Map([
+				["res://tsconfig.json", JSON.stringify({ compilerOptions: { types: [] }, include: ["src/main.ts"] })],
+				["res://src/main.ts", "import { value } from '../ignored/dep'; export const result = value;"],
+				["res://ignored/.gdignore", ""],
+				["res://ignored/dep.ts", "export const value = 42;"]
+			]);
+			const result = runCompiler(files, new Set(["res://src/main.ts"]));
+			assertOk(result);
+			if (JSON.stringify(result.outputs.map(output => output.source)) !==
+					JSON.stringify(["res://ignored/dep.ts", "res://src/main.ts"])) {
+				throw new Error("Explicit dependency was not emitted: " + JSON.stringify(result.outputs));
+			}
+			const dependency = result.inputs.find(input => input.path === "res://ignored/dep.ts");
+			if (!dependency || dependency.source !== files.get(dependency.path)) {
+				throw new Error("Explicit dependency is missing from compile inputs");
+			}
+			"""
+		)
+
+	def test_imported_declarations_and_missing_dependencies_are_tracked(self):
+		self.run_compiler_fixture(
+			r"""
+			const files = new Map([
+				["res://tsconfig.json", JSON.stringify({ compilerOptions: { types: [] }, include: ["src/main.ts"] })],
+				["res://src/main.ts", "import type { Value } from '../ignored/types'; export const value: Value = 42;"],
+				["res://ignored/types.d.ts", "export type Value = number;"]
+			]);
+			const roots = new Set(["res://src/main.ts"]);
+			let result = runCompiler(files, roots);
+			assertOk(result);
+			const declaration = result.inputs.find(input => input.path === "res://ignored/types.d.ts");
+			if (!declaration || declaration.source !== "export type Value = number;") {
+				throw new Error("Imported declaration snapshot was not tracked");
+			}
+			if (!result.inputs.some(input => input.path === "res://ignored/types.ts" && !input.exists)) {
+				throw new Error("Missing module candidate was not tracked");
+			}
+			files.set("res://ignored/types.d.ts", "export type Value = string;");
+			result = runCompiler(files, roots);
+			if (result.ok || !result.diagnostics.some(diagnostic => diagnostic.code === 2322)) {
+				throw new Error("Changed declaration was not checked");
+			}
+			"""
+		)
+
+	def test_project_discovery_respects_config_and_godot_directory_markers(self):
+		self.run_compiler_fixture(
+			r"""
+			const files = new Map([
+				["res://tsconfig.json", JSON.stringify({ extends: "./config/base.json" })],
+				["res://config/base.json", JSON.stringify({ include: ["../src/**/*.ts", "../missing/**/*.ts"], exclude: ["../src/excluded/**"] })],
+				["res://src/main.ts", "export const value = 1;"],
+				["res://src/ignored/.gdignore", ""],
+				["res://src/ignored/broken.ts", "invalid typescript"],
+				["res://src/nested/project.godot", "config_version=5"],
+				["res://.gdignore", ""]
+			]);
+			const entries = new Map([
+				["res://", { files: ["tsconfig.json"], directories: ["config", "src"] }],
+				["res://config", { files: ["base.json"], directories: [] }],
+				["res://src", { files: ["main.ts"], directories: ["excluded", "ignored", "nested"] }],
+				["res://src/ignored", { files: ["broken.ts"], directories: [] }]
+			]);
+			const directoryEntries = directory => {
+				if (["res://src/excluded", "res://src/nested"].includes(directory) ||
+						(directory === "res://src/ignored" && files.has("res://src/ignored/.gdignore"))) {
+					throw new Error("Excluded directory was enumerated: " + directory);
+				}
+				return entries.get(directory) || { files: [], directories: [] };
+			};
+			let result = runCompiler(files, null, directoryEntries);
+			assertOk(result);
+			if (JSON.stringify(result.files) !== JSON.stringify(["res://src/main.ts"])) {
+				throw new Error("Unexpected discovered roots: " + JSON.stringify(result));
+			}
+			files.set("res://src/added.ts", "export {};");
+			entries.get("res://src").files.push("added.ts");
+			result = runCompiler(files, null, directoryEntries);
+			assertOk(result);
+			if (!result.files.includes("res://src/added.ts")) throw new Error("Added source was not discovered");
+			files.delete("res://src/ignored/.gdignore");
+			result = runCompiler(files, null, directoryEntries);
+			assertOk(result);
+			if (!result.files.includes("res://src/ignored/broken.ts")) throw new Error("Removed ignore marker was not noticed");
+			"""
+		)
+
+	def test_missing_explicit_files_produce_typescript_diagnostics(self):
+		self.run_compiler_fixture(
+			r"""
+			const files = new Map([
+				["res://tsconfig.json", JSON.stringify({ compilerOptions: { types: [] }, files: ["src/main.ts", "src/pending.ts"] })],
+				["res://src/main.ts", "export {};"]
+			]);
+			const roots = runCompiler(files, null, () => ({ files: [], directories: [] }));
+			assertOk(roots);
+			if (JSON.stringify(roots.files) !== JSON.stringify(["res://src/main.ts"])) {
+				throw new Error("Missing file was selected for a native read");
+			}
+			const result = runCompiler(files, new Set(roots.files));
+			if (result.ok || !result.diagnostics.some(diagnostic => diagnostic.code === 6053)) {
+				throw new Error("Missing explicit file did not produce TypeScript's diagnostic");
+			}
+			"""
+		)
+
+	def test_inherited_config_paths_are_rewritten_for_runtime_imports(self):
+		self.run_compiler_fixture(
+			r"""
+			const files = new Map([
+				["res://tsconfig.json", JSON.stringify({ extends: "./config/base.json" })],
+				["res://config/base.json", JSON.stringify({ compilerOptions: {
+					target: "ES2022", types: [], baseUrl: "..", paths: { "@app/*": ["src/*"] }
+				}, include: ["../src/main.ts"] })],
+				["res://src/main.ts", "import { value } from '@app/dep'; export const result = value;"],
+				["res://src/dep.ts", "export const value = 42;"]
+			]);
+			const result = runCompiler(files);
+			assertOk(result);
+			const main = result.outputs.find(output => output.source === "res://src/main.ts");
+			if (!main || main.code.includes("@app/dep") || !main.code.includes("./dep.js")) {
+				throw new Error("Inherited paths alias was not rewritten: " + (main && main.code));
+			}
+			"""
+		)
 
 	def test_argument_counts_use_resolved_typescript_signatures(self):
 		self.run_compiler_fixture(

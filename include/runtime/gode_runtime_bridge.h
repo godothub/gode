@@ -15,6 +15,7 @@ protected:
 
 public:
 	static godot::Dictionary compile_typescript_project(const godot::Array &p_files);
+	static godot::Dictionary collect_typescript_project_sources(const godot::String &p_project_root);
 };
 
 } // namespace gode
